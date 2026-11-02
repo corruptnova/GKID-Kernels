@@ -1,13 +1,18 @@
 #!/system/bin/sh
-# GKID post-flash checks: run on the device, as root, after flashing a build.
+# GKID post-flash checks: run on the device after flashing a build.
 #
 #   adb push scripts/post-flash-check.sh /data/local/tmp/
-#   adb shell su -c sh /data/local/tmp/post-flash-check.sh
+#   adb shell sh /data/local/tmp/post-flash-check.sh
+#
+# The script re-runs itself through su when it is not root, so no su
+# wrapper is needed (and "su -c sh <file>" does NOT work: su only takes
+# the word after -c as the command). From a root shell, or Termux after
+# running su, use: sh /data/local/tmp/post-flash-check.sh
 #
 # Add --suspend [seconds] to also check that the device still suspends
 # (lock the screen when prompted; default wait is 300 seconds):
 #
-#   adb shell su -c sh /data/local/tmp/post-flash-check.sh --suspend
+#   adb shell sh /data/local/tmp/post-flash-check.sh --suspend
 #
 # Exit status is the number of FAIL results (0 means everything passed or
 # was skipped). Uses only toybox tools that ship with Android.
@@ -28,7 +33,12 @@ if [ "$1" = "--suspend" ]; then
 fi
 
 if [ "$(id -u)" != "0" ]; then
-	echo "Run this as root: su -c sh $0"
+	if [ -z "$GKID_CHECK_ELEVATED" ] && command -v su >/dev/null 2>&1; then
+		echo "Not root, re-running through su (approve the prompt in your root manager)..."
+		exec su -c "GKID_CHECK_ELEVATED=1 sh '$0' $*"
+	fi
+	echo "This needs root. Grant Shell root access in your root manager, then run:"
+	echo "  su -c 'sh $0'"
 	exit 1
 fi
 
@@ -89,7 +99,8 @@ MEDIA=/data/media/0
 if [ ! -d "$MEDIA/Android/data" ]; then
 	skip "$MEDIA/Android/data not found"
 else
-	flags=$(lsattr -d "$MEDIA" 2>/dev/null | awk '{print $1}')
+	flags=$(lsattr -d "$MEDIA" 2>/dev/null)
+	flags=${flags%% *}
 	casefold=no
 	case "$flags" in
 		*F*) casefold=yes; info "$MEDIA is casefolded (flags $flags)" ;;
