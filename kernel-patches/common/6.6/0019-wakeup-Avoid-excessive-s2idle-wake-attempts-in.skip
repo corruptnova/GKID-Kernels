@@ -1,0 +1,1 @@
+applied by apply_s2idle_wake_gate in functions.sh: android15-6.6 has extra lines around pm_system_wakeup()'s statements, so a context diff keeps breaking

@@ -372,6 +372,59 @@ PYEOF
     fi
 }
 
+# Same change as 0019-wakeup-Avoid-excessive-s2idle-wake-attempts-in.patch,
+# done by matching pm_system_wakeup()'s statements instead of diff context,
+# so vendor/Android lines around them (e.g. suspend_abort_fs_sync()) don't
+# break it. Only call s2idle_wake() on the first pending abort.
+apply_s2idle_wake_gate() {
+    local file="drivers/base/power/wakeup.c"
+
+    if [[ ! -f "$file" ]]; then
+        warning "$file not found - skipping s2idle wake gate"
+        return 0
+    fi
+
+    python3 - "$file" <<'PYEOF'
+import re
+import sys
+
+path = sys.argv[1]
+src = open(path).read()
+
+m = re.search(r'^void pm_system_wakeup\(void\)\n\{\n(.*?)^\}\n', src, re.M | re.S)
+if not m:
+    print("FUNC_NOT_FOUND", file=sys.stderr)
+    sys.exit(1)
+
+body = m.group(1)
+if "atomic_inc_return_relaxed(&pm_abort_suspend)" in body:
+    sys.exit(2)
+
+inc = "\tatomic_inc(&pm_abort_suspend);\n"
+wake = "\ts2idle_wake();\n"
+if body.count(inc) != 1 or body.count(wake) != 1 or body.index(inc) > body.index(wake):
+    sys.stderr.write("UNEXPECTED_BODY\n" + m.group(0))
+    sys.exit(1)
+
+new_body = ("\tunsigned int abort_count;\n\n"
+            + body.replace(inc, "\tabort_count = atomic_inc_return_relaxed(&pm_abort_suspend);\n")
+                  .replace(wake, "\tif (abort_count == 1)\n\t\ts2idle_wake();\n"))
+src = src[:m.start(1)] + new_body + src[m.end(1):]
+open(path, "w").write(src)
+PYEOF
+
+    local rc=$?
+    if [[ $rc -eq 2 ]]; then
+        success "s2idle wake gate already present in $file"
+    elif [[ $rc -eq 0 ]]; then
+        success "s2idle wake gate applied to $file"
+        sed -n '/^void pm_system_wakeup(void)/,/^}/p' "$file"
+    else
+        warning "s2idle wake gate not applied: pm_system_wakeup() in $file is not in the expected shape (see above)"
+        return 1
+    fi
+}
+
 apply_extract_cert_key_pass_patch() {
     local file="certs/extract-cert.c"
 
