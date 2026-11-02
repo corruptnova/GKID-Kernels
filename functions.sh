@@ -540,6 +540,41 @@ apply_susfs_patches() {
     echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
 }
 
+# BakaSU injects its own SELinux types ("ksu"/"ksu_file") and every module
+# sepolicy.rule type (e.g. "xposed_file"/"xposed_data") through add_type()/
+# add_rule_raw() in kernel/selinux/sepolicy.c, but — unlike stock KernelSU via
+# 10_enable_susfs_for_ksu.patch — it never registers them with SuSFS. Without
+# that registration SuSFS's selinuxfs context/access hooks have nothing to hide,
+# so the DirtySepolicy oracle still validates u:r:ksu:s0 etc. even with
+# selinux_hide enabled. Wire the two injection chokepoints to SuSFS. No-op when
+# BakaSU already does this upstream (grep guard) or on non-SuSFS builds.
+register_bakasu_susfs_types() {
+    local ksu_dir="KernelSU"
+    local sepolicy="$ksu_dir/kernel/selinux/sepolicy.c"
+    local patch="$PATCHES_DIR/0001-feat-susfs-register-injected-sepolicy-types.patch"
+    local start="$PWD"
+
+    if [ ! -f "$sepolicy" ]; then
+        error "BakaSU sepolicy.c not found at $sepolicy"
+        return 1
+    fi
+
+    if grep -q "susfs_add_sus_type" "$sepolicy"; then
+        success "BakaSU already registers injected sepolicy types with SuSFS, skipping"
+        return 0
+    fi
+
+    log "Wiring BakaSU sepolicy injection into SuSFS (sus_type + avd spoof)"
+    cd "$ksu_dir"
+    if ! apply_patch_file "$patch"; then
+        cd "$start"
+        error "Failed to register BakaSU injected sepolicy types with SuSFS"
+        return 1
+    fi
+    cd "$start"
+    success "BakaSU sepolicy types registered with SuSFS"
+}
+
 clone_susfs() {
     DEPTH=${1:-1}
     local pin="${GKI_SUSFS_COMMIT[$KERNEL_VERSION]:-}"

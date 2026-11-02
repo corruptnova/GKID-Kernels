@@ -217,6 +217,8 @@ if susfs_included && [ "$KSU" = "BSU" ]; then
   log "BakaSU included"
   install_ksu "Baka-SU/BakaSU" "main"
 
+  register_bakasu_susfs_types
+
   clone_susfs
   apply_susfs_patches
 

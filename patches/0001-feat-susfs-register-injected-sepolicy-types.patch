@@ -1,0 +1,68 @@
+From: corruptnova <corruptnova@gmail.com>
+Subject: [PATCH] feat: register injected sepolicy types/edges with SuSFS
+
+In a BakaSU + SuSFS build, SuSFS patches security/selinux/selinuxfs.c so
+the /sys/fs/selinux/{context,access} nodes are redirected to
+susfs_sel_write_context()/susfs_sel_write_access() while selinux_hide is
+running. Those handlers only hide a type (return -EINVAL for the context
+node) or scrub an allow edge (access node) when the type/edge has been
+registered with SuSFS via susfs_add_sus_type() /
+susfs_add_sus_avd_allowed_by_type().
+
+Upstream KernelSU wires those calls into add_type()/add_rule_raw() through
+kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch, but the GKID BakaSU
+variant does not apply that patch and BakaSU's own sepolicy.c never calls
+them. Result: the injected "ksu"/"ksu_file" types (and any module-injected
+types such as "xposed_file"/"xposed_data" from a sepolicy.rule) are created
+in the live policy but never registered as SuSFS "sus" types. The
+DirtySepolicy context-validity oracle (e.g. Duck Detector) then gets VALID
+back for u:r:ksu:s0 etc. even with selinux_hide=1, because it short-circuits
+on the context node before the working attr/current hook is ever reached.
+
+Wire BakaSU's single type/rule injection chokepoints to SuSFS, mirroring
+upstream 10_enable_susfs_for_ksu.patch. add_type() is the single path for
+both built-in and module-rule types, and add_rule_raw() for every allow
+edge, so this covers ksu, ksu_file and module types in one shot and feeds
+the clean (pre-injection) access vector to the access-node spoofer.
+
+Guarded by CONFIG_KSU_SUSFS, so it is a no-op on non-SuSFS builds.
+
+Generated against Baka-SU/BakaSU@516d3e87fbc986ccefdde2c2765f1700612441a9
+
+diff --git a/kernel/selinux/sepolicy.c b/kernel/selinux/sepolicy.c
+index 288d55b..cc317a7 100644
+--- a/kernel/selinux/sepolicy.c
++++ b/kernel/selinux/sepolicy.c
+@@ -18,6 +18,11 @@
+ #include "ss/symtab.h"
+ #include "compat/kernel_compat.h" // Add check Huawei Device
+ 
++#ifdef CONFIG_KSU_SUSFS
++extern int susfs_add_sus_avd_allowed_by_type(u32 s_type, u32 t_type, u16 type, u32 orig_avd_allowed);
++extern int susfs_add_sus_type(const char *secctx, u32 type_value);
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+ #define KSU_SUPPORT_ADD_TYPE
+ 
+ //////////////////////////////////////////////////////
+@@ -338,6 +343,10 @@ static bool add_rule_raw(struct policydb *db, struct type_datum *src, struct typ
+                 return false;
+         }
+ 
++#ifdef CONFIG_KSU_SUSFS
++        susfs_add_sus_avd_allowed_by_type(src->value, tgt->value, cls->value, node->datum.u.data);
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+         if (invert) {
+             if (perm)
+                 node->datum.u.data &= ~(1U << (perm->value - 1));
+@@ -761,6 +770,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
+         ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1, 1);
+     }
+ 
++#ifdef CONFIG_KSU_SUSFS
++    susfs_add_sus_type(type_name, type->value);
++#endif // #ifdef CONFIG_KSU_SUSFS
+     return true;
+ 
+     // safe? because only huawei do this fucking things
