@@ -275,19 +275,41 @@ apply_kernel_patches() {
     local patches=()
     while IFS= read -r -d '' patch; do
         patches+=("$patch")
-    done < <(find "$patch_dir" -type f \( -name "*.patch" -o -name "*.diff" \) -print0 | sort -z -V)
+    done < <(find "$patch_dir" -maxdepth 1 -type f \( -name "*.patch" -o -name "*.diff" \) -print0 | sort -z -V)
 
     [[ ${#patches[@]} -eq 0 ]] && { warning "No patches found in $patch_dir"; return 0; }
 
     info "Found ${#patches[@]} patches in $patch_dir"
 
+    # Per-GKI-line overrides live in $patch_dir/$KERNEL_VERSION/:
+    #   <name>.patch  replaces the generic <name>.patch for this kernel
+    #   <name>.skip   skips <name>.patch for this kernel (file holds the reason)
+    local ver_dir="$patch_dir/${KERNEL_VERSION:-none}"
+    local skipped=0
+
     for patch in "${patches[@]}"; do
+        local name base
+        name=$(basename "$patch")
+        base="${name%.*}"
+
+        if [[ -f "$ver_dir/$base.skip" ]]; then
+            info "Skipping $name on $KERNEL_VERSION: $(head -n1 "$ver_dir/$base.skip")"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
+        if [[ -f "$ver_dir/$name" ]]; then
+            info "Using $KERNEL_VERSION variant of $name"
+            patch="$ver_dir/$name"
+        fi
+
         if ! apply_patch_file "$patch"; then
             ((failed++))
         fi
     done
 
-    [[ $failed -eq 0 ]] && success "All patches applied successfully" || warning "Applied $((${#patches[@]} - failed))/${#patches[@]} patches, $failed failed"
+    local total=$((${#patches[@]} - skipped))
+    [[ $failed -eq 0 ]] && success "All patches applied successfully" || warning "Applied $((total - failed))/$total patches, $failed failed"
     return $failed
 }
 
