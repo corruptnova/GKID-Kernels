@@ -217,7 +217,11 @@ fi
 
 if [ "$NH" = "true" ] && ! kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$No_DS" = "false" ]; then
   log "Applying NetHunter patches"
-  apply_patch_file "$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject.patch"
+  # Prefer a variant rebased for this GKI line, else the generic one
+  NH_PATCH="$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject-${KERNEL_VERSION}.patch"
+  [ -f "$NH_PATCH" ] || NH_PATCH="$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject.patch"
+  log "Using $(basename "$NH_PATCH")"
+  apply_patch_file "$NH_PATCH"
   git clone --depth=1 "https://github.com/ahmed-alnassif/rtw88"
   rm -rf "drivers/net/wireless/realtek/rtw88"
   mv rtw88 "drivers/net/wireless/realtek/"

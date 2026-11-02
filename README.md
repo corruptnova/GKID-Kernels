@@ -282,7 +282,10 @@ Switch congestion control algorithms (temporary, resets on reboot):
 su -c "sysctl -w net.ipv4.tcp_congestion_control=westwood"
 
 # BBRv3 - default, best for speed
+# 6.1 / 6.6: BBRv3 replaces "bbr"
 su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"
+# 5.10 / 5.15 / 6.12: BBRv3 is "bbr3" ("bbr" is still the original BBRv1)
+su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr3"
 ```
 
 **Make permanent:** Create a script in `/data/adb/service.d/` with the sysctl command or use ReSuSFS.
