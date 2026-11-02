@@ -275,19 +275,41 @@ apply_kernel_patches() {
     local patches=()
     while IFS= read -r -d '' patch; do
         patches+=("$patch")
-    done < <(find "$patch_dir" -type f \( -name "*.patch" -o -name "*.diff" \) -print0 | sort -z -V)
+    done < <(find "$patch_dir" -maxdepth 1 -type f \( -name "*.patch" -o -name "*.diff" \) -print0 | sort -z -V)
 
     [[ ${#patches[@]} -eq 0 ]] && { warning "No patches found in $patch_dir"; return 0; }
 
     info "Found ${#patches[@]} patches in $patch_dir"
 
+    # Per-GKI-line overrides live in $patch_dir/$KERNEL_VERSION/:
+    #   <name>.patch  replaces the generic <name>.patch for this kernel
+    #   <name>.skip   skips <name>.patch for this kernel (file holds the reason)
+    local ver_dir="$patch_dir/${KERNEL_VERSION:-none}"
+    local skipped=0
+
     for patch in "${patches[@]}"; do
+        local name base
+        name=$(basename "$patch")
+        base="${name%.*}"
+
+        if [[ -f "$ver_dir/$base.skip" ]]; then
+            info "Skipping $name on $KERNEL_VERSION: $(head -n1 "$ver_dir/$base.skip")"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
+        if [[ -f "$ver_dir/$name" ]]; then
+            info "Using $KERNEL_VERSION variant of $name"
+            patch="$ver_dir/$name"
+        fi
+
         if ! apply_patch_file "$patch"; then
             ((failed++))
         fi
     done
 
-    [[ $failed -eq 0 ]] && success "All patches applied successfully" || warning "Applied $((${#patches[@]} - failed))/${#patches[@]} patches, $failed failed"
+    local total=$((${#patches[@]} - skipped))
+    [[ $failed -eq 0 ]] && success "All patches applied successfully" || warning "Applied $((total - failed))/$total patches, $failed failed"
     return $failed
 }
 
@@ -346,6 +368,59 @@ PYEOF
         success "Force load module patch applied to $file"
     else
         warning "Force load module patch pattern not found in $file (source may differ from expected) - skipping"
+        return 1
+    fi
+}
+
+# Same change as 0019-wakeup-Avoid-excessive-s2idle-wake-attempts-in.patch,
+# done by matching pm_system_wakeup()'s statements instead of diff context,
+# so vendor/Android lines around them (e.g. suspend_abort_fs_sync()) don't
+# break it. Only call s2idle_wake() on the first pending abort.
+apply_s2idle_wake_gate() {
+    local file="drivers/base/power/wakeup.c"
+
+    if [[ ! -f "$file" ]]; then
+        warning "$file not found - skipping s2idle wake gate"
+        return 0
+    fi
+
+    python3 - "$file" <<'PYEOF'
+import re
+import sys
+
+path = sys.argv[1]
+src = open(path).read()
+
+m = re.search(r'^void pm_system_wakeup\(void\)\n\{\n(.*?)^\}\n', src, re.M | re.S)
+if not m:
+    print("FUNC_NOT_FOUND", file=sys.stderr)
+    sys.exit(1)
+
+body = m.group(1)
+if "atomic_inc_return_relaxed(&pm_abort_suspend)" in body:
+    sys.exit(2)
+
+inc = "\tatomic_inc(&pm_abort_suspend);\n"
+wake = "\ts2idle_wake();\n"
+if body.count(inc) != 1 or body.count(wake) != 1 or body.index(inc) > body.index(wake):
+    sys.stderr.write("UNEXPECTED_BODY\n" + m.group(0))
+    sys.exit(1)
+
+new_body = ("\tunsigned int abort_count;\n\n"
+            + body.replace(inc, "\tabort_count = atomic_inc_return_relaxed(&pm_abort_suspend);\n")
+                  .replace(wake, "\tif (abort_count == 1)\n\t\ts2idle_wake();\n"))
+src = src[:m.start(1)] + new_body + src[m.end(1):]
+open(path, "w").write(src)
+PYEOF
+
+    local rc=$?
+    if [[ $rc -eq 2 ]]; then
+        success "s2idle wake gate already present in $file"
+    elif [[ $rc -eq 0 ]]; then
+        success "s2idle wake gate applied to $file"
+        sed -n '/^void pm_system_wakeup(void)/,/^}/p' "$file"
+    else
+        warning "s2idle wake gate not applied: pm_system_wakeup() in $file is not in the expected shape (see above)"
         return 1
     fi
 }
