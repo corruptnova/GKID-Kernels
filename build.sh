@@ -157,6 +157,17 @@ if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   cleanup_abi_gki_protected_exports
 fi
 
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+  # The Duchamp 6.1 trees ship the SIMD memcmp from 0008, which uses q0-q5
+  # without kernel_neon_begin() and can corrupt user FP/SIMD state. Undo it.
+  MEMCMP_PATCH="$KERNEL_PATCHES/common/0008-arm64-lib-Optimize-memcmp.patch"
+  if git apply -R --check "$MEMCMP_PATCH" 2>/dev/null; then
+    git apply -R "$MEMCMP_PATCH" && success "Reverted SIMD memcmp (0008) in 6.1 tree"
+  else
+    log "6.1 tree has no SIMD memcmp from 0008, nothing to revert"
+  fi
+fi
+
 
 log "Applying BBRv3 patch"
 # Prefer a patch rebased for this GKI line (e.g. bbrv3-6.6.patch), else the generic one
