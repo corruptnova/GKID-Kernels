@@ -165,6 +165,21 @@ BBR_PATCH="$KERNEL_PATCHES/bbrv3/bbrv3-${KERNEL_VERSION}.patch"
 log "Using $(basename "$BBR_PATCH")"
 apply_patch_file "$BBR_PATCH"
 
+log "Applying wakelock timeout patch"
+# Caps userspace /sys/power/wake_lock locks taken without a timeout to 500ms
+apply_patch_file "$KERNEL_PATCHES/power/add_timeout_wakelocks_globally.patch"
+
+log "Applying hiding patches"
+# Stop zero-width/ignorable code points from being stripped during casefold,
+# which let paths like "Android<U+200B>/data" resolve to the real Android/data
+if kernel_version_ge "$KERNEL_VERSION" "6.1"; then
+  apply_patch_file "$KERNEL_PATCHES/hiding/unicode_bypass_fix_6.1+.patch"
+else
+  apply_patch_file "$KERNEL_PATCHES/hiding/unicode_bypass_fix_5.10-5.15.patch"
+fi
+# Lets CONFIG_FAKE_DISABLE strip chosen options from /proc/config.gz
+apply_patch_file "$KERNEL_PATCHES/hiding/fake_config.patch"
+
 
 if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying NTSync patches..."
@@ -329,6 +344,12 @@ echo "::group::[*] Generating config"
 make ${MAKE_ARGS[@]} "$KERNEL_DEFCONFIG"
 echo "::endgroup::"
 
+# Root/hiding options to report as "not set" in /proc/config.gz (fake_config.patch)
+FAKE_DISABLE_CONFIGS="$(grep -oE '^CONFIG_(KSU|KPM|NOMOUNT|BBG)(_[A-Za-z0-9_]*)?=' "$OUTDIR/.config" | tr -d '=' | tr '\n' ' ' | sed 's/ $//')"
+if [ -n "$FAKE_DISABLE_CONFIGS" ]; then
+  log "Hiding from /proc/config.gz: $FAKE_DISABLE_CONFIGS"
+fi
+
 if susfs_included; then
 
   log "DEBUG: Checking defconfig for SUSFS"
@@ -460,7 +481,7 @@ echo "::endgroup::"
 
 set -eo pipefail
 echo "::group::[*] Building kernel"
-make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++"
+make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++" CONFIG_FAKE_DISABLE="$FAKE_DISABLE_CONFIGS"
 echo "::endgroup::"
 set +eo pipefail
 

@@ -160,6 +160,8 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | **uname Spoofing** | System information hiding |
 | **Open Redirect** | Protected file operations |
 | **SUS MAP/PATH/MOUNT** | Complete filesystem hiding |
+| **Unicode Bypass Fix** | Zero-width tricks like `Android<U+200B>/data` no longer reach the real `Android/data` |
+| **Fake config.gz** | KSU, SuSFS, NoMount and BBG options reported as not set in `/proc/config.gz` |
 
 **What this means for you:**
 - Stronger root hiding
