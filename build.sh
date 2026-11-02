@@ -218,7 +218,10 @@ fi
 
 if { [ "$DROIDSPACES" = "true" ] || [ "$NH" = "true" ]; } && kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying DroidSpaces/NetHunter sysvipc patch"
-  apply_patch_file "$KERNEL_PATCHES/droidspaces/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch"
+  # Prefer a copy rebased for this GKI line (e.g. 001.GKI-6.6-fix_sysvipc_kabi.patch)
+  SYSVIPC_PATCH="$KERNEL_PATCHES/droidspaces/001.GKI-${KERNEL_VERSION}-fix_sysvipc_kabi.patch"
+  [ -f "$SYSVIPC_PATCH" ] || SYSVIPC_PATCH="$KERNEL_PATCHES/droidspaces/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch"
+  apply_patch_file "$SYSVIPC_PATCH"
   if kernel_version_eq "$KERNEL_VERSION" "5.10"; then
     apply_patch_file "$KERNEL_PATCHES/droidspaces/002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch"
   fi

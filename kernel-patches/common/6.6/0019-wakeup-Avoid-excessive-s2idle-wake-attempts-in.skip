@@ -1,1 +1,1 @@
-applied by apply_s2idle_wake_gate in functions.sh: android15-6.6 has extra lines around pm_system_wakeup()'s statements, so a context diff keeps breaking
+applied by apply_s2idle_wake_gate in functions.sh: android15-6.6 has added and later dropped suspend_abort_fs_sync() in pm_system_wakeup(), so a context diff keeps breaking
