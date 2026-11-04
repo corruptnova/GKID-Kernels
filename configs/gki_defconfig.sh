@@ -30,6 +30,11 @@ apply_config "$WORKDIR/configs/compat.config" "$DEFCONFIG"
 echo "⚙️ Adding Universal Performance Tuning"
 apply_config "$WORKDIR/configs/custom.config" "$DEFCONFIG"
 
+if [ "${HARDENING:-true}" = "true" ]; then
+  echo "🛡️ Adding KMI-safe security hardening"
+  apply_config "$WORKDIR/configs/hardening.config" "$DEFCONFIG"
+fi
+
 if [ "$C_LTO" != "true" ]; then
   if [ "$KSU_COMPAT" = "true" ] || [ "$KSU" = "vnlto" ]; then
     LTO="noneLTO"

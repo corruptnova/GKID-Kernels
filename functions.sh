@@ -18,7 +18,7 @@ declare -A GKI_BRANCH=(
 declare -A GKI_AOSP_BRANCH=(
   ["5.10"]="android12-5.10-lts"
   ["5.15"]="android13-5.15-lts"
-  ["6.6"]="android15-6.6-lts"
+  ["6.6"]="android15-6.6"  # main branch: same 6.6.144 LTS level as -lts, but gets Android security fixes first
   ["6.12"]="android16-6.12-lts"
 )
 

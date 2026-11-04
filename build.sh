@@ -464,6 +464,25 @@ make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++"
 echo "::endgroup::"
 set +eo pipefail
 
+# Vendor modules with mismatched symbol CRCs are force-loaded (see
+# 0003-kernel-module.c patch), so catch KMI breaks here instead of on-device.
+KMI_STG="$KSRC/android/abi_gki_aarch64.stg"
+if [ -f "$KMI_STG" ] && [ -f "$OUTDIR/vmlinux.symvers" ]; then
+  echo "::group::[*] KMI symbol CRC check"
+  python3 "$KMI_CHECK" "$KMI_STG" "$OUTDIR/vmlinux.symvers"
+  KMI_RC=$?
+  echo "::endgroup::"
+  if [ $KMI_RC -ne 0 ]; then
+    if [ "${KMI_STRICT:-false}" = "true" ]; then
+      error "KMI check failed (KMI_STRICT=true)"
+      exit 1
+    fi
+    echo "::warning::KMI check found symbol CRC mismatches; vendor modules may misbehave"
+  fi
+else
+  warning "KMI check skipped: abi_gki_aarch64.stg or vmlinux.symvers not found"
+fi
+
 cd $WORKDIR
 
 log "Cloning anykernel from $(simplify_gh_url "$ANYKERNEL_REPO")"
