@@ -64,12 +64,31 @@ def resolve_kernel_versions() -> List[str]:
 
 	return [selected]
 
+def filter_variants(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+	"""Keep only the variants named in VARIANTS (comma-separated), if set."""
+	raw = os.environ.get("VARIANTS", "").strip()
+	if not raw:
+		return entries
+
+	wanted = [v.strip() for v in raw.split(",") if v.strip()]
+	known = {e["name"] for e in entries}
+	unknown = [v for v in wanted if v not in known]
+	if unknown:
+		raise ValueError(
+			f"Unknown VARIANTS: {', '.join(unknown)}. "
+			f"Expected names from: {', '.join(sorted(known))}"
+		)
+
+	return [e for e in entries if e["name"] in wanted]
+
 def generate_matrix() -> Dict[str, List[Dict[str, Any]]]:
 	variant_entries = []
 
 	for env_var, configs in BUILD_CONFIGS.items():
 		if get_env_bool(env_var):
 			variant_entries.extend(configs)
+
+	variant_entries = filter_variants(variant_entries)
 
 	if not variant_entries:
 		raise ValueError(
