@@ -153,8 +153,20 @@ echo "::group::[+] Applied patches"
 if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   apply_kernel_patches
   apply_force_load_module_patch
+  apply_s2idle_wake_gate
   apply_extract_cert_key_pass_patch
   cleanup_abi_gki_protected_exports
+fi
+
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+  # The Duchamp 6.1 trees ship the SIMD memcmp from 0008, which uses q0-q5
+  # without kernel_neon_begin() and can corrupt user FP/SIMD state. Undo it.
+  MEMCMP_PATCH="$KERNEL_PATCHES/common/0008-arm64-lib-Optimize-memcmp.patch"
+  if git apply -R --check "$MEMCMP_PATCH" 2>/dev/null; then
+    git apply -R "$MEMCMP_PATCH" && success "Reverted SIMD memcmp (0008) in 6.1 tree"
+  else
+    log "6.1 tree has no SIMD memcmp from 0008, nothing to revert"
+  fi
 fi
 
 
@@ -164,6 +176,21 @@ BBR_PATCH="$KERNEL_PATCHES/bbrv3/bbrv3-${KERNEL_VERSION}.patch"
 [ -f "$BBR_PATCH" ] || BBR_PATCH="$KERNEL_PATCHES/bbrv3/bbrv3.patch"
 log "Using $(basename "$BBR_PATCH")"
 apply_patch_file "$BBR_PATCH"
+
+log "Applying wakelock timeout patch"
+# Caps userspace /sys/power/wake_lock locks taken without a timeout to 500ms
+apply_patch_file "$KERNEL_PATCHES/power/add_timeout_wakelocks_globally.patch"
+
+log "Applying hiding patches"
+# Stop zero-width/ignorable code points from being stripped during casefold,
+# which let paths like "Android<U+200B>/data" resolve to the real Android/data
+if kernel_version_ge "$KERNEL_VERSION" "6.1"; then
+  apply_patch_file "$KERNEL_PATCHES/hiding/unicode_bypass_fix_6.1+.patch"
+else
+  apply_patch_file "$KERNEL_PATCHES/hiding/unicode_bypass_fix_5.10-5.15.patch"
+fi
+# Lets CONFIG_FAKE_DISABLE strip chosen options from /proc/config.gz
+apply_patch_file "$KERNEL_PATCHES/hiding/fake_config.patch"
 
 
 if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
@@ -191,7 +218,10 @@ fi
 
 if { [ "$DROIDSPACES" = "true" ] || [ "$NH" = "true" ]; } && kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying DroidSpaces/NetHunter sysvipc patch"
-  apply_patch_file "$KERNEL_PATCHES/droidspaces/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch"
+  # Prefer a copy rebased for this GKI line (e.g. 001.GKI-6.6-fix_sysvipc_kabi.patch)
+  SYSVIPC_PATCH="$KERNEL_PATCHES/droidspaces/001.GKI-${KERNEL_VERSION}-fix_sysvipc_kabi.patch"
+  [ -f "$SYSVIPC_PATCH" ] || SYSVIPC_PATCH="$KERNEL_PATCHES/droidspaces/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch"
+  apply_patch_file "$SYSVIPC_PATCH"
   if kernel_version_eq "$KERNEL_VERSION" "5.10"; then
     apply_patch_file "$KERNEL_PATCHES/droidspaces/002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch"
   fi
@@ -202,7 +232,11 @@ fi
 
 if [ "$NH" = "true" ] && ! kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$No_DS" = "false" ]; then
   log "Applying NetHunter patches"
-  apply_patch_file "$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject.patch"
+  # Prefer a variant rebased for this GKI line, else the generic one
+  NH_PATCH="$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject-${KERNEL_VERSION}.patch"
+  [ -f "$NH_PATCH" ] || NH_PATCH="$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject.patch"
+  log "Using $(basename "$NH_PATCH")"
+  apply_patch_file "$NH_PATCH"
   git clone --depth=1 "https://github.com/ahmed-alnassif/rtw88"
   rm -rf "drivers/net/wireless/realtek/rtw88"
   mv rtw88 "drivers/net/wireless/realtek/"
@@ -216,6 +250,8 @@ set -eo pipefail
 if susfs_included && [ "$KSU" = "BSU" ]; then
   log "BakaSU included"
   install_ksu "Baka-SU/BakaSU" "main"
+
+  register_bakasu_susfs_types
 
   clone_susfs
   apply_susfs_patches
@@ -328,6 +364,12 @@ KMI_CHECK="$WORKDIR/py/kmi-check-6.x.py"
 echo "::group::[*] Generating config"
 make ${MAKE_ARGS[@]} "$KERNEL_DEFCONFIG"
 echo "::endgroup::"
+
+# Root/hiding options to report as "not set" in /proc/config.gz (fake_config.patch)
+FAKE_DISABLE_CONFIGS="$(grep -oE '^CONFIG_(KSU|KPM|NOMOUNT|BBG)(_[A-Za-z0-9_]*)?=' "$OUTDIR/.config" | tr -d '=' | tr '\n' ' ' | sed 's/ $//')"
+if [ -n "$FAKE_DISABLE_CONFIGS" ]; then
+  log "Hiding from /proc/config.gz: $FAKE_DISABLE_CONFIGS"
+fi
 
 if susfs_included; then
 
@@ -460,7 +502,7 @@ echo "::endgroup::"
 
 set -eo pipefail
 echo "::group::[*] Building kernel"
-make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++"
+make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++" CONFIG_FAKE_DISABLE="$FAKE_DISABLE_CONFIGS"
 echo "::endgroup::"
 set +eo pipefail
 

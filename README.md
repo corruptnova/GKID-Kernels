@@ -160,6 +160,8 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | **uname Spoofing** | System information hiding |
 | **Open Redirect** | Protected file operations |
 | **SUS MAP/PATH/MOUNT** | Complete filesystem hiding |
+| **Unicode Bypass Fix** | Zero-width tricks like `Android<U+200B>/data` no longer reach the real `Android/data` |
+| **Fake config.gz** | KSU, SuSFS, NoMount and BBG options reported as not set in `/proc/config.gz` |
 
 **What this means for you:**
 - Stronger root hiding
@@ -280,7 +282,10 @@ Switch congestion control algorithms (temporary, resets on reboot):
 su -c "sysctl -w net.ipv4.tcp_congestion_control=westwood"
 
 # BBRv3 - default, best for speed
+# 6.1 / 6.6: BBRv3 replaces "bbr"
 su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"
+# 5.10 / 5.15 / 6.12: BBRv3 is "bbr3" ("bbr" is still the original BBRv1)
+su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr3"
 ```
 
 **Make permanent:** Create a script in `/data/adb/service.d/` with the sysctl command or use ReSuSFS.

@@ -35,6 +35,17 @@ if [ "${HARDENING:-true}" = "true" ]; then
   apply_config "$WORKDIR/configs/hardening.config" "$DEFCONFIG"
 fi
 
+# The 5.10/5.15/6.12 BBRv3 backports add BBRv3 as a separate "bbr3" module
+# (tcp_bbr3.c) instead of replacing tcp_bbr.c, so build it and make it the
+# default. Must come after custom.config so DEFAULT_BBR3 overrides DEFAULT_BBR.
+if grep -q "^config TCP_CONG_BBR3" net/ipv4/Kconfig; then
+  echo "🚀 BBRv3 (bbr3) enabled as default TCP congestion control"
+  cat >> "$DEFCONFIG" <<EOF
+CONFIG_TCP_CONG_BBR3=y
+CONFIG_DEFAULT_BBR3=y
+EOF
+fi
+
 if [ "$C_LTO" != "true" ]; then
   if [ "$KSU_COMPAT" = "true" ] || [ "$KSU" = "vnlto" ]; then
     LTO="noneLTO"
