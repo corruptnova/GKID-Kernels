@@ -95,7 +95,8 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | **CPU Governors** | schedutil + ondemand for smart power scaling |
 | **I/O Scheduler** | mq-deadline optimized for UFS 4.0 storage |
 | **F2FS Tuning** | 50ms GC sleep for buttery smooth I/O |
-| **Memory Optimizations** | 50% faster memcpy/memset/memcmp operations |
+| **AutoFDO** | Built with Google's in-tree sample profile on 6.6 and 6.12 for faster binder, syscalls and app launch |
+| **Memory Optimizations** | Prefetching in the arm64 copy routines and an aligned `clear_page()` |
 | **ext4 Tuning** | Extended commit age reducing unnecessary writes |
 | **NTSync Driver** | Faster Windows games/apps on Winlator/GameHub |
 
@@ -161,6 +162,7 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | **Open Redirect** | Protected file operations |
 | **SUS MAP/PATH/MOUNT** | Complete filesystem hiding |
 | **Unicode Bypass Fix** | Zero-width tricks like `Android<U+200B>/data` no longer reach the real `Android/data` |
+| **Stock Kernel Name** | Optional `STOCK_NAME` build input reports a stock GKI style `uname -r` instead of `-GKID-...` |
 | **Fake config.gz** | KSU, SuSFS, NoMount and BBG options reported as not set in `/proc/config.gz` |
 
 **What this means for you:**

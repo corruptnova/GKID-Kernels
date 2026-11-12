@@ -167,6 +167,15 @@ if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   else
     log "6.1 tree has no SIMD memcmp from 0008, nothing to revert"
   fi
+
+  # The Duchamp 6.1 trees also ship the "3x faster" int_sqrt, which is slower
+  # than upstream's __fls() version and returns the wrong root for x >= 2^62.
+  INT_SQRT_PATCH="$KERNEL_PATCHES/revert-6.1/0010-int_sqrt-Improve-3x-faster-integer-sqrt.patch"
+  if git apply -R --check "$INT_SQRT_PATCH" 2>/dev/null; then
+    git apply -R "$INT_SQRT_PATCH" && success "Reverted int_sqrt (0010) in 6.1 tree"
+  else
+    log "6.1 tree has no int_sqrt from 0010, nothing to revert"
+  fi
 fi
 
 
@@ -318,7 +327,24 @@ source "$WORKDIR/configs/gki_defconfig.sh"
 if [ "${TODO:-kernel}" = "kernel" ]; then
   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
   SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
-  config --set-str CONFIG_LOCALVERSION "-${KERNEL_NAME}${SUFFIX}"
+  KERNEL_LOCALVERSION="-${KERNEL_NAME}${SUFFIX}"
+
+  # STOCK_NAME: report a stock GKI style release (uname -r) instead of -GKID-...
+  if [ "${STOCK_NAME:-false}" = "true" ]; then
+    if STOCK_LOCALVERSION="$(stock_localversion)"; then
+      KERNEL_LOCALVERSION="$STOCK_LOCALVERSION"
+      # Stock GKI builds report build-user@build-host in /proc/version
+      USER="build-user"
+      HOST="build-host"
+      log "Stock style kernel release: ${LINUX_VERSION}${KERNEL_LOCALVERSION}"
+    else
+      # Don't quietly ship the -GKID- name when a stock one was asked for
+      error "STOCK_NAME: no usable stock release suffix"
+      exit 1
+    fi
+  fi
+
+  config --set-str CONFIG_LOCALVERSION "$KERNEL_LOCALVERSION"
   config --disable CONFIG_LOCALVERSION_AUTO
   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
 fi
@@ -339,6 +365,19 @@ MAKE_ARGS=(
   -j$(nproc --all)
   O="$OUTDIR"
 )
+
+# AutoFDO: optimize with the sample profile Google ships in the GKI tree
+# (android15-6.6 and later). Without CLANG_AUTOFDO_PROFILE the kernel only gets
+# the profiling flags and none of the optimization.
+if [ "${AUTOFDO:-true}" = "true" ]; then
+  if grep -q "^config AUTOFDO_CLANG" arch/Kconfig 2>/dev/null && AUTOFDO_PROFILE="$(find_autofdo_profile)"; then
+    log "AutoFDO: using in-tree profile ${AUTOFDO_PROFILE#"$KSRC"/}"
+    config --enable CONFIG_AUTOFDO_CLANG
+    MAKE_ARGS+=(CLANG_AUTOFDO_PROFILE="$AUTOFDO_PROFILE")
+  else
+    log "AutoFDO: no in-tree profile for $KERNEL_VERSION, building without it"
+  fi
+fi
 
 if [ "${LTO:-}" = "thinLTO" ] && [ "$CLEAN_LTO_CACHE" = "true" ]; then
   rm -rf "$LINK_CACHE_PATH"

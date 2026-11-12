@@ -137,6 +137,63 @@ susfs_included() {
   return $?
 }
 
+# Print the release suffix (the part of `uname -r` after x.y.z) a stock GKI
+# build of this tree would carry, e.g. "-android15-8-g1a2b3c4d5e6f-4k".
+# STOCK_NAME_SUFFIX, when set, is used verbatim instead: paste the suffix of
+# your device's stock `uname -r` there for an exact match (stock OEM builds
+# also carry an -ab<build id> part that can't be derived from the source).
+# Run from the kernel source root, before CONFIG_LOCALVERSION is overwritten.
+stock_localversion() {
+  local suffix="${STOCK_NAME_SUFFIX:-}"
+
+  if [ -n "$suffix" ]; then
+    if [[ ! "$suffix" =~ ^-[A-Za-z0-9._+-]+$ ]]; then
+      error "STOCK_NAME_SUFFIX must start with '-' and use only letters, digits, '.', '_', '+', '-'" >&2
+      return 1
+    fi
+    echo "$suffix"
+    return 0
+  fi
+
+  # BRANCH (android15-6.6) and KMI_GENERATION (8) live in one of these two
+  # files depending on the GKI line.
+  local branch="" kmi_gen="" f
+  for f in build.config.constants build.config.common; do
+    [ -f "$f" ] || continue
+    [ -n "$branch" ] || branch=$(sed -n 's/^BRANCH=//p' "$f" | head -n1)
+    [ -n "$kmi_gen" ] || kmi_gen=$(sed -n 's/^KMI_GENERATION=//p' "$f" | head -n1)
+  done
+  [ -n "$branch" ] || branch="${GKI_BRANCH[$KERNEL_VERSION]:-}"
+
+  local android_release sha
+  android_release=$(echo "$branch" | sed -n 's/^\(android[0-9]\{2,\}\)-.*/\1/p')
+  sha=$(git rev-parse --short=12 HEAD 2>/dev/null)
+
+  if [ -z "$android_release" ] || [[ ! "$kmi_gen" =~ ^[0-9]+$ ]] || [ -z "$sha" ]; then
+    error "Could not derive a stock release (BRANCH='$branch' KMI_GENERATION='$kmi_gen' sha='$sha')" >&2
+    return 1
+  fi
+
+  # Stock defconfigs may add their own suffix (6.6+: "-4k"), keep it at the end
+  local defconfig_suffix
+  defconfig_suffix=$(sed -n 's/^CONFIG_LOCALVERSION="\(.*\)"$/\1/p' "$DEFCONFIG_FILE" | tail -n1)
+
+  echo "-${android_release}-${kmi_gen}-g${sha}${defconfig_suffix}"
+}
+
+# Print the path of the AutoFDO profile shipped in the kernel tree, if any
+# (android15-6.6: android/gki/..., android16-6.12: gki/...).
+find_autofdo_profile() {
+  local p
+  for p in gki/aarch64/afdo/kernel.afdo android/gki/aarch64/afdo/kernel.afdo; do
+    if [ -f "$KSRC/$p" ]; then
+      echo "$KSRC/$p"
+      return 0
+    fi
+  done
+  return 1
+}
+
 simplify_gh_url() {
   local URL="$1"
   echo "$URL" | sed "s|https://github.com/||g" | sed "s|.git||g"

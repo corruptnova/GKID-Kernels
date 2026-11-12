@@ -51,6 +51,21 @@ on:
         type: boolean
         default: false
 
+      AUTOFDO:
+        description: "Optimize with the AutoFDO profile shipped in the GKI tree (6.6 and 6.12)"
+        type: boolean
+        default: true
+
+      STOCK_NAME:
+        description: "Report a stock GKI style kernel release instead of -GKID-..."
+        type: boolean
+        default: false
+
+      STOCK_NAME_SUFFIX:
+        description: "With STOCK_NAME: exact release suffix to use, e.g. -android15-8-g1a2b3c4d5e6f-ab12345678-4k (empty = derive from source)"
+        type: string
+        default: ""
+
 env:
   MAN_DISABLE: true
   DEBIAN_FRONTEND: noninteractive
@@ -146,6 +161,9 @@ jobs:
           DROIDSPACES: ${{ inputs.DROIDSPACES }}
           NH: ${{ inputs.NH }}
           NM: ${{ inputs.NM }}
+          AUTOFDO: ${{ inputs.AUTOFDO }}
+          STOCK_NAME: ${{ inputs.STOCK_NAME }}
+          STOCK_NAME_SUFFIX: ${{ inputs.STOCK_NAME_SUFFIX }}
           BUILD_NAME: ${{ matrix.name }}
           RUN_NUM: -r${{ github.run_number }}
         run: |
