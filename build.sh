@@ -351,7 +351,12 @@ fi
 
 export KBUILD_BUILD_USER="$USER"
 export KBUILD_BUILD_HOST="$HOST"
-export KBUILD_BUILD_TIMESTAMP=$(git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %d %T %z %Y')
+if [ "${STOCK_NAME:-false}" = "true" ]; then
+  # Stock GKI stamps the build time the way `date` prints it, in UTC
+  export KBUILD_BUILD_TIMESTAMP=$(TZ=UTC git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %e %T UTC %Y')
+else
+  export KBUILD_BUILD_TIMESTAMP=$(git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %d %T %z %Y')
+fi
 export KCFLAGS="-w"
 
 LINK_CACHE_PATH="/dev/shm/thinlto-cache"

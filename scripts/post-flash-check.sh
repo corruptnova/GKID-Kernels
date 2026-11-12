@@ -51,8 +51,25 @@ section "Kernel"
 info "$(cat /proc/version)"
 case "$(cat /proc/version)" in
 	*GKID*) pass "running a GKID kernel" ;;
-	*) fail "kernel version string does not contain GKID (flashed the right image?)" ;;
+	# STOCK_NAME builds carry a stock style release, but still name the compiler
+	*Neutron*) pass "running a GKID kernel built with STOCK_NAME" ;;
+	*) fail "kernel version string is not a GKID build (flashed the right image?)" ;;
 esac
+
+# --------------------------------------------------------------------------
+section "SELinux"
+# Permissive SELinux lets any app read /proc/version, netlink link data and
+# other surfaces that are normally denied, which undoes most of the hiding.
+enforce="$(getenforce 2>/dev/null)"
+if [ "$enforce" = "Enforcing" ]; then
+	pass "SELinux is enforcing"
+else
+	fail "SELinux is ${enforce:-unknown}: something with root switched it off after boot"
+fi
+if dmesg >/dev/null 2>&1; then
+	# The kernel logs every switch with the time since boot
+	dmesg | grep "enforcing=" | while read -r line; do info "$line"; done
+fi
 
 # --------------------------------------------------------------------------
 section "Vendor modules (force-load / KABI)"
