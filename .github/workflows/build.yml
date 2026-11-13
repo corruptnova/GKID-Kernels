@@ -56,6 +56,11 @@ on:
         type: boolean
         default: true
 
+      HARDENING:
+        description: "Apply KMI-safe security hardening (INIT_ON_FREE, kstack randomization, zero-call-used-regs)"
+        type: boolean
+        default: true
+
       STOCK_NAME:
         description: "Report a stock GKI style kernel release instead of -GKID-..."
         type: boolean
@@ -162,6 +167,7 @@ jobs:
           NH: ${{ inputs.NH }}
           NM: ${{ inputs.NM }}
           AUTOFDO: ${{ inputs.AUTOFDO }}
+          HARDENING: ${{ inputs.HARDENING }}
           STOCK_NAME: ${{ inputs.STOCK_NAME }}
           STOCK_VERSION: ${{ inputs.STOCK_VERSION }}
           BUILD_NAME: ${{ matrix.name }}
