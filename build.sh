@@ -329,19 +329,30 @@ if [ "${TODO:-kernel}" = "kernel" ]; then
   SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
   KERNEL_LOCALVERSION="-${KERNEL_NAME}${SUFFIX}"
 
-  # STOCK_NAME: report a stock GKI style release (uname -r) instead of -GKID-...
+  # STOCK_NAME: report what a stock kernel reports instead of -GKID-...
   if [ "${STOCK_NAME:-false}" = "true" ]; then
-    if STOCK_LOCALVERSION="$(stock_localversion)"; then
-      KERNEL_LOCALVERSION="$STOCK_LOCALVERSION"
-      # Stock GKI builds report build-user@build-host in /proc/version
-      USER="build-user"
-      HOST="build-host"
-      log "Stock style kernel release: ${LINUX_VERSION}${KERNEL_LOCALVERSION}"
-    else
-      # Don't quietly ship the -GKID- name when a stock one was asked for
-      error "STOCK_NAME: no usable stock release suffix"
+    # Don't quietly ship the -GKID- name when a stock one was asked for
+    if ! resolve_stock_identity; then
+      error "STOCK_NAME: no usable stock identity"
       exit 1
     fi
+    KERNEL_LOCALVERSION="$STOCK_LOCALVERSION"
+    USER="$STOCK_BUILD_USER"
+    HOST="$STOCK_BUILD_HOST"
+
+    if [ -n "$STOCK_COMPILER" ]; then
+      # Report the stock compiler in /proc/version. mkcompile_h builds that
+      # string from the real compiler; let an exported override win.
+      export KBUILD_BUILD_COMPILER="$STOCK_COMPILER"
+      sed -i \
+        -e 's/"\${CC_VERSION}, \${LD_VERSION}"/"${KBUILD_BUILD_COMPILER:-${CC_VERSION}, ${LD_VERSION}}"/' \
+        -e 's/"\$CC_VERSION, \$LD_VERSION"/"${KBUILD_BUILD_COMPILER:-$CC_VERSION, $LD_VERSION}"/' \
+        scripts/mkcompile_h
+      grep -q "KBUILD_BUILD_COMPILER" scripts/mkcompile_h \
+        || warning "STOCK_NAME: scripts/mkcompile_h not in the expected shape, /proc/version keeps the real compiler"
+    fi
+
+    log "Stock kernel release: ${LINUX_VERSION%.*}.${STOCK_SUBLEVEL:-${LINUX_VERSION##*.}}${KERNEL_LOCALVERSION} (${USER}@${HOST})"
   fi
 
   config --set-str CONFIG_LOCALVERSION "$KERNEL_LOCALVERSION"
@@ -351,7 +362,10 @@ fi
 
 export KBUILD_BUILD_USER="$USER"
 export KBUILD_BUILD_HOST="$HOST"
-if [ "${STOCK_NAME:-false}" = "true" ]; then
+if [ -n "${STOCK_BUILD_TIMESTAMP:-}" ]; then
+  # Build date copied from the stock version line in STOCK_VERSION
+  export KBUILD_BUILD_TIMESTAMP="$STOCK_BUILD_TIMESTAMP"
+elif [ "${STOCK_NAME:-false}" = "true" ]; then
   # Stock GKI stamps the build time the way `date` prints it, in UTC
   export KBUILD_BUILD_TIMESTAMP=$(TZ=UTC git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %e %T UTC %Y')
 else
@@ -370,6 +384,14 @@ MAKE_ARGS=(
   -j$(nproc --all)
   O="$OUTDIR"
 )
+
+# STOCK_NAME with a full stock release: report its patch level (6.6.127) in
+# uname and in LINUX_VERSION_CODE, which apps can also read from the vDSO.
+# The source stays at its real level; only the reported number changes.
+if [ -n "${STOCK_SUBLEVEL:-}" ] && [ "$STOCK_SUBLEVEL" != "${LINUX_VERSION##*.}" ]; then
+  log "Reporting kernel patch level $STOCK_SUBLEVEL instead of ${LINUX_VERSION##*.}"
+  MAKE_ARGS+=(SUBLEVEL="$STOCK_SUBLEVEL")
+fi
 
 # AutoFDO: optimize with the sample profile Google ships in the GKI tree
 # (android15-6.6 and later). Without CLANG_AUTOFDO_PROFILE the kernel only gets

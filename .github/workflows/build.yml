@@ -61,8 +61,8 @@ on:
         type: boolean
         default: false
 
-      STOCK_NAME_SUFFIX:
-        description: "With STOCK_NAME: exact release suffix to use, e.g. -android15-8-g1a2b3c4d5e6f-ab12345678-4k (empty = derive from source)"
+      STOCK_VERSION:
+        description: "With STOCK_NAME: paste the stock kernel's 'Linux version ...' line to copy its release, builder, compiler and build date (or just a release suffix; empty = derive from source)"
         type: string
         default: ""
 
@@ -163,7 +163,7 @@ jobs:
           NM: ${{ inputs.NM }}
           AUTOFDO: ${{ inputs.AUTOFDO }}
           STOCK_NAME: ${{ inputs.STOCK_NAME }}
-          STOCK_NAME_SUFFIX: ${{ inputs.STOCK_NAME_SUFFIX }}
+          STOCK_VERSION: ${{ inputs.STOCK_VERSION }}
           BUILD_NAME: ${{ matrix.name }}
           RUN_NUM: -r${{ github.run_number }}
         run: |

@@ -49,12 +49,16 @@ ZWJ="$(printf '\342\200\215')"
 # --------------------------------------------------------------------------
 section "Kernel"
 info "$(cat /proc/version)"
-case "$(cat /proc/version)" in
-	*GKID*) pass "running a GKID kernel" ;;
-	# STOCK_NAME builds carry a stock style release, but still name the compiler
-	*Neutron*) pass "running a GKID kernel built with STOCK_NAME" ;;
-	*) fail "kernel version string is not a GKID build (flashed the right image?)" ;;
-esac
+# STOCK_NAME builds report a stock version line, so fall back to the compiler
+# recorded in the kernel config, which only root can read.
+if grep -q GKID /proc/version; then
+	pass "running a GKID kernel"
+elif grep -q Neutron /proc/version ||
+	zcat /proc/config.gz 2>/dev/null | grep -q '^CONFIG_CC_VERSION_TEXT="Neutron'; then
+	pass "running a GKID kernel built with STOCK_NAME"
+else
+	fail "kernel is not a GKID build (flashed the right image?)"
+fi
 
 # --------------------------------------------------------------------------
 section "SELinux"

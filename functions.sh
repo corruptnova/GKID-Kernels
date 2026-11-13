@@ -137,48 +137,107 @@ susfs_included() {
   return $?
 }
 
-# Print the release suffix (the part of `uname -r` after x.y.z) a stock GKI
-# build of this tree would carry, e.g. "-android15-8-g1a2b3c4d5e6f-4k".
-# STOCK_NAME_SUFFIX, when set, is used verbatim instead: paste the suffix of
-# your device's stock `uname -r` there for an exact match (stock OEM builds
-# also carry an -ab<build id> part that can't be derived from the source).
+# Work out the identity a stock kernel reports, for STOCK_NAME builds.
+# STOCK_VERSION may hold:
+#   - the stock kernel's whole version line, as /proc/version prints it or as
+#     found in its boot.img (the leading "Linux version " is optional):
+#       6.6.127-android15-8-g91d825611104-ab16252310-4k (kleaf@build-host)
+#       (<compiler>) #1 SMP PREEMPT Thu Sep  3 03:37:34 UTC 2026
+#     Release, builder, compiler and build date are all copied from it.
+#   - just a release (6.6.127-android15-8-g...-4k) or only its suffix
+#     (-android15-8-g...-4k)
+#   - nothing: the suffix is derived from the source tree. That gives a stock
+#     shaped name, not the one a given device shipped with (no -ab<build id>).
+# Sets STOCK_LOCALVERSION, STOCK_BUILD_USER and STOCK_BUILD_HOST, plus
+# STOCK_SUBLEVEL, STOCK_BUILD_TIMESTAMP and STOCK_COMPILER when the input
+# carried them (empty = keep the build's own).
 # Run from the kernel source root, before CONFIG_LOCALVERSION is overwritten.
-stock_localversion() {
-  local suffix="${STOCK_NAME_SUFFIX:-}"
+resolve_stock_identity() {
+  local line="${STOCK_VERSION:-}"
+  local release=""
 
-  if [ -n "$suffix" ]; then
-    if [[ ! "$suffix" =~ ^-[A-Za-z0-9._+-]+$ ]]; then
-      error "STOCK_NAME_SUFFIX must start with '-' and use only letters, digits, '.', '_', '+', '-'" >&2
+  STOCK_LOCALVERSION=""
+  STOCK_SUBLEVEL=""
+  STOCK_BUILD_USER=""
+  STOCK_BUILD_HOST=""
+  STOCK_BUILD_TIMESTAMP=""
+  STOCK_COMPILER=""
+
+  # Trim surrounding whitespace and the optional "Linux version " prefix
+  line="${line#"${line%%[![:space:]]*}"}"
+  line="${line%"${line##*[![:space:]]}"}"
+  line="${line#Linux version }"
+
+  if [[ "$line" == *" "* ]]; then
+    local re='^([^ ]+) \(([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)\) \((.+)\) #[0-9]+ SMP (PREEMPT[A-Z_]* )?(.+)$'
+    if [[ ! "$line" =~ $re ]]; then
+      error "STOCK_VERSION is not a kernel version line: expected '<release> (<user>@<host>) (<compiler>) #1 SMP PREEMPT <date>'"
       return 1
     fi
-    echo "$suffix"
-    return 0
+    release="${BASH_REMATCH[1]}"
+    STOCK_BUILD_USER="${BASH_REMATCH[2]}"
+    STOCK_BUILD_HOST="${BASH_REMATCH[3]}"
+    STOCK_COMPILER="${BASH_REMATCH[4]}"
+    STOCK_BUILD_TIMESTAMP="${BASH_REMATCH[6]}"
+
+    # Both end up inside C string literals in generated headers
+    if [[ ! "$STOCK_COMPILER" =~ ^[A-Za-z0-9\ .,:/+\(\)_-]+$ ]] || [[ ! "$STOCK_BUILD_TIMESTAMP" =~ ^[A-Za-z0-9\ :+-]+$ ]]; then
+      error "STOCK_VERSION has unexpected characters in its compiler or build date"
+      return 1
+    fi
+  else
+    release="$line"
   fi
 
-  # BRANCH (android15-6.6) and KMI_GENERATION (8) live in one of these two
-  # files depending on the GKI line.
-  local branch="" kmi_gen="" f
-  for f in build.config.constants build.config.common; do
-    [ -f "$f" ] || continue
-    [ -n "$branch" ] || branch=$(sed -n 's/^BRANCH=//p' "$f" | head -n1)
-    [ -n "$kmi_gen" ] || kmi_gen=$(sed -n 's/^KMI_GENERATION=//p' "$f" | head -n1)
-  done
-  [ -n "$branch" ] || branch="${GKI_BRANCH[$KERNEL_VERSION]:-}"
-
-  local android_release sha
-  android_release=$(echo "$branch" | sed -n 's/^\(android[0-9]\{2,\}\)-.*/\1/p')
-  sha=$(git rev-parse --short=12 HEAD 2>/dev/null)
-
-  if [ -z "$android_release" ] || [[ ! "$kmi_gen" =~ ^[0-9]+$ ]] || [ -z "$sha" ]; then
-    error "Could not derive a stock release (BRANCH='$branch' KMI_GENERATION='$kmi_gen' sha='$sha')" >&2
+  if [[ "$release" =~ ^([0-9]+\.[0-9]+)\.([0-9]+)(-[A-Za-z0-9._+-]+)$ ]]; then
+    if [ "${BASH_REMATCH[1]}" != "${LINUX_VERSION%.*}" ]; then
+      error "STOCK_VERSION is a ${BASH_REMATCH[1]} kernel, but this build is ${LINUX_VERSION%.*}"
+      return 1
+    fi
+    STOCK_SUBLEVEL="${BASH_REMATCH[2]}"
+    STOCK_LOCALVERSION="${BASH_REMATCH[3]}"
+  elif [[ "$release" =~ ^-[A-Za-z0-9._+-]+$ ]]; then
+    STOCK_LOCALVERSION="$release"
+  elif [ -n "$release" ]; then
+    error "STOCK_VERSION release '$release' must look like 6.6.127-android15-8-g...-4k or -android15-8-g...-4k"
     return 1
+  else
+    # BRANCH (android15-6.6) and KMI_GENERATION (8) live in one of these two
+    # files depending on the GKI line.
+    local branch="" kmi_gen="" f
+    for f in build.config.constants build.config.common; do
+      [ -f "$f" ] || continue
+      [ -n "$branch" ] || branch=$(sed -n 's/^BRANCH=//p' "$f" | head -n1)
+      [ -n "$kmi_gen" ] || kmi_gen=$(sed -n 's/^KMI_GENERATION=//p' "$f" | head -n1)
+    done
+    [ -n "$branch" ] || branch="${GKI_BRANCH[$KERNEL_VERSION]:-}"
+
+    local android_release sha
+    android_release=$(echo "$branch" | sed -n 's/^\(android[0-9]\{2,\}\)-.*/\1/p')
+    sha=$(git rev-parse --short=12 HEAD 2>/dev/null)
+
+    if [ -z "$android_release" ] || [[ ! "$kmi_gen" =~ ^[0-9]+$ ]] || [ -z "$sha" ]; then
+      error "Could not derive a stock release (BRANCH='$branch' KMI_GENERATION='$kmi_gen' sha='$sha')"
+      return 1
+    fi
+
+    # Stock defconfigs may add their own suffix (6.6+: "-4k"), keep it at the end
+    local defconfig_suffix
+    defconfig_suffix=$(sed -n 's/^CONFIG_LOCALVERSION="\(.*\)"$/\1/p' "$DEFCONFIG_FILE" | tail -n1)
+
+    STOCK_LOCALVERSION="-${android_release}-${kmi_gen}-g${sha}${defconfig_suffix}"
   fi
 
-  # Stock defconfigs may add their own suffix (6.6+: "-4k"), keep it at the end
-  local defconfig_suffix
-  defconfig_suffix=$(sed -n 's/^CONFIG_LOCALVERSION="\(.*\)"$/\1/p' "$DEFCONFIG_FILE" | tail -n1)
-
-  echo "-${android_release}-${kmi_gen}-g${sha}${defconfig_suffix}"
+  if [ -z "$STOCK_BUILD_USER" ]; then
+    # Kleaf built kernels report kleaf@build-host (seen on a stock Pixel 10
+    # 6.6 kernel); the older build.sh lines report build-user@build-host.
+    if kernel_version_ge "$KERNEL_VERSION" "6.6"; then
+      STOCK_BUILD_USER="kleaf"
+    else
+      STOCK_BUILD_USER="build-user"
+    fi
+    STOCK_BUILD_HOST="build-host"
+  fi
 }
 
 # Print the path of the AutoFDO profile shipped in the kernel tree, if any

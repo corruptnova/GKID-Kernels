@@ -162,7 +162,7 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | **Open Redirect** | Protected file operations |
 | **SUS MAP/PATH/MOUNT** | Complete filesystem hiding |
 | **Unicode Bypass Fix** | Zero-width tricks like `Android<U+200B>/data` no longer reach the real `Android/data` |
-| **Stock Kernel Name** | Optional `STOCK_NAME` build input reports a stock GKI style `uname -r` instead of `-GKID-...` |
+| **Stock Kernel Name** | Optional `STOCK_NAME` build input reports a stock kernel identity instead of `-GKID-...`; paste your device's stock `Linux version ...` line into `STOCK_VERSION` for an exact match |
 | **Fake config.gz** | KSU, SuSFS, NoMount and BBG options reported as not set in `/proc/config.gz` |
 
 **What this means for you:**
