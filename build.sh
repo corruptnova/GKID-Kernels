@@ -385,12 +385,15 @@ MAKE_ARGS=(
   O="$OUTDIR"
 )
 
-# STOCK_NAME with a full stock release: report its patch level (6.6.127) in
-# uname and in LINUX_VERSION_CODE, which apps can also read from the vDSO.
-# The source stays at its real level; only the reported number changes.
+# NOTE: STOCK_VERSION may carry an older patch level than the source (e.g. a
+# stock 6.6.127 line against a 6.6.144 tree). We deliberately do NOT change the
+# build's SUBLEVEL to match: reporting a different version than the kernel was
+# built from desyncs vendor modules' vermagic, so the display/touch/modem
+# drivers fail to load and the device bootloops. The real source version is
+# kept; only the name suffix, builder, compiler and date from STOCK_VERSION are
+# applied. The reported release therefore keeps the source patch level.
 if [ -n "${STOCK_SUBLEVEL:-}" ] && [ "$STOCK_SUBLEVEL" != "${LINUX_VERSION##*.}" ]; then
-  log "Reporting kernel patch level $STOCK_SUBLEVEL instead of ${LINUX_VERSION##*.}"
-  MAKE_ARGS+=(SUBLEVEL="$STOCK_SUBLEVEL")
+  warning "STOCK_VERSION patch level $STOCK_SUBLEVEL differs from source ${LINUX_VERSION##*.}; keeping ${LINUX_VERSION##*.} so vendor modules still load"
 fi
 
 # AutoFDO: optimize with the sample profile Google ships in the GKI tree
