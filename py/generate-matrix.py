@@ -38,6 +38,11 @@ BUILD_CONFIGS: Dict[str, List[Dict[str, Any]]] = {
 		config(name="Compat+BSU+SUSFS", KSU="BSU", KSU_COMPAT="true", KSU_SUSFS="true"),
 		config(name="Compat+NoDS+KSU+SUSFS", KSU="KSU", KSU_COMPAT="true", KSU_SUSFS="true", No_DS="true"),
 		config(name="Compat+NoDS+BSU+SUSFS", KSU="BSU", KSU_COMPAT="true", KSU_SUSFS="true", No_DS="true")
+	],
+	"BUILD_FSU_SUSFS": [
+		config(name="FSU+SUSFS", KSU="FSU", KSU_SUSFS="true"),
+		config(name="Compat+FSU+SUSFS", KSU="FSU", KSU_COMPAT="true", KSU_SUSFS="true"),
+		config(name="Compat+NoDS+FSU+SUSFS", KSU="FSU", KSU_COMPAT="true", KSU_SUSFS="true", No_DS="true")
 	]
 }
 

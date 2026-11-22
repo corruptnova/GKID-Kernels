@@ -127,6 +127,49 @@ install_ksu() {
   curl -LSs "$URL" | bash -s "$REF"
 }
 
+# FinaSU's Kbuild defaults to stock KernelSU's manager signature, so the
+# FinaSU manager would report the driver as unavailable. Read the signing
+# certificate of the latest FinaSU release APK and export it as
+# FINASU_CERT_SIZE/FINASU_CERT_HASH for KSU_EXPECTED_SIZE2/KSU_EXPECTED_HASH2.
+# Set both variables beforehand to skip the download.
+resolve_finasu_manager_cert() {
+  local repo="$1"
+  local apk_dir="$WORKDIR/finasu-manager"
+  local certs
+
+  if [ -n "${FINASU_CERT_SIZE:-}" ] && [ -n "${FINASU_CERT_HASH:-}" ]; then
+    log "Using FinaSU manager certificate from environment"
+  else
+    rm -rf "$apk_dir"
+    mkdir -p "$apk_dir"
+    log "Downloading latest $repo release manager APK"
+    if ! retry gh release download --repo "$repo" --pattern '*-release.apk' --dir "$apk_dir" --clobber; then
+      error "Failed to download the $repo release manager APK"
+      return 1
+    fi
+
+    if ! certs="$(python3 "$WORKDIR/py/extract-manager-cert.py" "$apk_dir"/*.apk)"; then
+      error "No signing certificate found in $(ls "$apk_dir")"
+      return 1
+    fi
+    if [ "$(printf '%s\n' "$certs" | wc -l)" -ne 1 ]; then
+      error "Expected one signing certificate in the $repo release APKs, found:"
+      echo "$certs"
+      return 1
+    fi
+    read -r FINASU_CERT_SIZE FINASU_CERT_HASH <<< "$certs"
+    rm -rf "$apk_dir"
+  fi
+
+  if ! [[ "$FINASU_CERT_SIZE" =~ ^0x[0-9a-fA-F]+$ && "$FINASU_CERT_HASH" =~ ^[0-9a-f]{64}$ ]]; then
+    error "Invalid FinaSU manager certificate: size='$FINASU_CERT_SIZE' sha256='$FINASU_CERT_HASH'"
+    return 1
+  fi
+
+  export FINASU_CERT_SIZE FINASU_CERT_HASH
+  success "FinaSU manager certificate: size=$FINASU_CERT_SIZE sha256=$FINASU_CERT_HASH"
+}
+
 ksu_included() {
   [ "$KSU" == "yes" ]
   return $?

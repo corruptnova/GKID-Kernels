@@ -195,8 +195,12 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | KernelSU+SuSFS | ✅ | ✅ | Full | ❌ |
 | KSU+SuSFS+MM | ✅ | ✅ | Full | ❌ |
 | BakaSU+SuSFS | ✅ | ✅ | Full | ❌ |
+| FinaSU+SuSFS | ✅ | ✅ | Full | ❌ |
 | Compat+KSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
 | Compat+BakaSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
+| Compat+FinaSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
+
+**FinaSU builds** need the [FinaSU manager](https://github.com/LyraVoid/FinaSU/releases), have no KPM, and use FinaSU's own NoMount instead of the built-in one.
 
 **Not sure? Use a `Compat` variant first**: it fixes most boot issues. Full feature breakdown, LTO explanation, and troubleshooting live in the [README](https://github.com/ahmed-alnassif/GKID-Kernels#-build-variants).
 
@@ -304,6 +308,13 @@ Test both and use whichever performs better on your network.
 {read_or_default("release-artifacts/BakaSU_changelog.txt")}
 
 **Full commit history:** [Browse all commits](https://github.com/Baka-SU/BakaSU/commits/main)
+
+---
+**FinaSU changelog (last 5 commits):**
+
+{read_or_default("release-artifacts/FinaSU_changelog.txt")}
+
+**Full commit history:** [Browse all commits](https://github.com/LyraVoid/FinaSU/commits/dev)
 
 ---
 > [!Tip]

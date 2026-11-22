@@ -58,6 +58,11 @@ on:
         type: boolean
         default: true
 
+      BUILD_FSU_SUSFS:
+        description: "Build with FinaSU + SUSFS"
+        type: boolean
+        default: true
+
       CLEAN_LTO_CACHE:
         description: "Clean ThinLTO cache to fix .config bug"
         type: boolean
@@ -123,6 +128,7 @@ jobs:
           BUILD_VANILLA: ${{ github.event.inputs.BUILD_VANILLA }}
           BUILD_KSU: ${{ github.event.inputs.BUILD_KSU }}
           BUILD_KSU_SUSFS: ${{ github.event.inputs.BUILD_KSU_SUSFS }}
+          BUILD_FSU_SUSFS: ${{ github.event.inputs.BUILD_FSU_SUSFS }}
         run: |
           python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
 
@@ -436,6 +442,10 @@ jobs:
           \-\-\-
           **BakaSU:**
           $(read_or_default "release-artifacts/BakaSU_changelog.txt")
+
+          \-\-\-
+          **FinaSU:**
+          $(read_or_default "release-artifacts/FinaSU_changelog.txt")
           INNER
             )
 

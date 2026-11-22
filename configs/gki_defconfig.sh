@@ -7,7 +7,12 @@ function apply_config(){
   cat "$1" >> "$2"
 }
 
-if [ "$KSU" != "no" ]; then
+if [ "$KSU" = "FSU" ]; then
+  # FinaSU has no KPM support
+  echo "⚙️ Added FinaSU configuration"
+  echo "CONFIG_KSU=y" >> $DEFCONFIG
+  apply_config "$WORKDIR/configs/finasu.config" "$DEFCONFIG"
+elif [ "$KSU" != "no" ]; then
   # Base KSU Config & Dependencies
   echo "⚙️ Added KSU configuration"
   cat >> $DEFCONFIG <<EOF
@@ -17,11 +22,23 @@ EOF
 fi
 
 echo "🧩 Adding Built-in Features"
-apply_config "$WORKDIR/configs/features.config" "$DEFCONFIG"
+if [ "$KSU" = "FSU" ]; then
+  # FinaSU loads its own NoMount driver, so keep the built-in one out
+  grep -v '^CONFIG_NOMOUNT=' "$WORKDIR/configs/features.config" >> "$DEFCONFIG"
+else
+  apply_config "$WORKDIR/configs/features.config" "$DEFCONFIG"
+fi
 
 if [ "$KSU_SUSFS" = "true" ]; then
   echo "🔧 Mode: SuSFS Hook Enabled"
   apply_config "$WORKDIR/configs/susfs.config" "$DEFCONFIG"
+
+  if [ "$KSU" = "FSU" ]; then
+    # FinaSU defaults to the Tracepoint backend; use the direct ksu_handle_*
+    # calls added by the SUSFS kernel patch instead
+    echo "🔧 FinaSU: SUSFS Inline hook backend"
+    echo "CONFIG_KSU_HOOK_SUSFS_INLINE=y" >> "$DEFCONFIG"
+  fi
 fi
 
 echo "⚙️ Adding Compatibility GKI Networking and Filesystem configs"
