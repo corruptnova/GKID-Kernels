@@ -98,7 +98,8 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | **CPU Governors** | schedutil + ondemand for smart power scaling |
 | **I/O Scheduler** | mq-deadline optimized for UFS 4.0 storage |
 | **F2FS Tuning** | 50ms GC sleep for buttery smooth I/O |
-| **Memory Optimizations** | 50% faster memcpy/memset/memcmp operations |
+| **AutoFDO** | Built with Google's in-tree sample profile on 6.6 and 6.12 for faster binder, syscalls and app launch |
+| **Memory Optimizations** | Prefetching in the arm64 copy routines and an aligned `clear_page()` |
 | **ext4 Tuning** | Extended commit age reducing unnecessary writes |
 | **NTSync Driver** | Faster Windows games/apps on Winlator/GameHub |
 
@@ -163,6 +164,9 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 | **uname Spoofing** | System information hiding |
 | **Open Redirect** | Protected file operations |
 | **SUS MAP/PATH/MOUNT** | Complete filesystem hiding |
+| **Unicode Bypass Fix** | Zero-width tricks like `Android<U+200B>/data` no longer reach the real `Android/data` |
+| **Stock Kernel Name** | Optional `STOCK_NAME` build input reports a stock kernel identity instead of `-GKID-...`; paste your device's stock `Linux version ...` line into `STOCK_VERSION` for an exact match |
+| **Fake config.gz** | KSU, SuSFS, NoMount and BBG options reported as not set in `/proc/config.gz` |
 
 **What this means for you:**
 - Stronger root hiding
@@ -284,7 +288,10 @@ Switch congestion control algorithms (temporary, resets on reboot):
 su -c "sysctl -w net.ipv4.tcp_congestion_control=westwood"
 
 # BBRv3 - default, best for speed
+# 6.1 / 6.6: BBRv3 replaces "bbr"
 su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"
+# 5.10 / 5.15 / 6.12: BBRv3 is "bbr3" ("bbr" is still the original BBRv1)
+su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr3"
 ```
 
 **Make permanent:** Create a script in `/data/adb/service.d/` with the sysctl command or use ReSuSFS.

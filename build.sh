@@ -159,8 +159,29 @@ echo "::group::[+] Applied patches"
 if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   apply_kernel_patches
   apply_force_load_module_patch
+  apply_s2idle_wake_gate
   apply_extract_cert_key_pass_patch
   cleanup_abi_gki_protected_exports
+fi
+
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+  # The Duchamp 6.1 trees ship the SIMD memcmp from 0008, which uses q0-q5
+  # without kernel_neon_begin() and can corrupt user FP/SIMD state. Undo it.
+  MEMCMP_PATCH="$KERNEL_PATCHES/common/0008-arm64-lib-Optimize-memcmp.patch"
+  if git apply -R --check "$MEMCMP_PATCH" 2>/dev/null; then
+    git apply -R "$MEMCMP_PATCH" && success "Reverted SIMD memcmp (0008) in 6.1 tree"
+  else
+    log "6.1 tree has no SIMD memcmp from 0008, nothing to revert"
+  fi
+
+  # The Duchamp 6.1 trees also ship the "3x faster" int_sqrt, which is slower
+  # than upstream's __fls() version and returns the wrong root for x >= 2^62.
+  INT_SQRT_PATCH="$KERNEL_PATCHES/revert-6.1/0010-int_sqrt-Improve-3x-faster-integer-sqrt.patch"
+  if git apply -R --check "$INT_SQRT_PATCH" 2>/dev/null; then
+    git apply -R "$INT_SQRT_PATCH" && success "Reverted int_sqrt (0010) in 6.1 tree"
+  else
+    log "6.1 tree has no int_sqrt from 0010, nothing to revert"
+  fi
 fi
 
 
@@ -170,6 +191,21 @@ BBR_PATCH="$KERNEL_PATCHES/bbrv3/bbrv3-${KERNEL_VERSION}.patch"
 [ -f "$BBR_PATCH" ] || BBR_PATCH="$KERNEL_PATCHES/bbrv3/bbrv3.patch"
 log "Using $(basename "$BBR_PATCH")"
 apply_patch_file "$BBR_PATCH"
+
+log "Applying wakelock timeout patch"
+# Caps userspace /sys/power/wake_lock locks taken without a timeout to 500ms
+apply_patch_file "$KERNEL_PATCHES/power/add_timeout_wakelocks_globally.patch"
+
+log "Applying hiding patches"
+# Stop zero-width/ignorable code points from being stripped during casefold,
+# which let paths like "Android<U+200B>/data" resolve to the real Android/data
+if kernel_version_ge "$KERNEL_VERSION" "6.1"; then
+  apply_patch_file "$KERNEL_PATCHES/hiding/unicode_bypass_fix_6.1+.patch"
+else
+  apply_patch_file "$KERNEL_PATCHES/hiding/unicode_bypass_fix_5.10-5.15.patch"
+fi
+# Lets CONFIG_FAKE_DISABLE strip chosen options from /proc/config.gz
+apply_patch_file "$KERNEL_PATCHES/hiding/fake_config.patch"
 
 
 if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
@@ -197,7 +233,10 @@ fi
 
 if { [ "$DROIDSPACES" = "true" ] || [ "$NH" = "true" ]; } && kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying DroidSpaces/NetHunter sysvipc patch"
-  apply_patch_file "$KERNEL_PATCHES/droidspaces/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch"
+  # Prefer a copy rebased for this GKI line (e.g. 001.GKI-6.6-fix_sysvipc_kabi.patch)
+  SYSVIPC_PATCH="$KERNEL_PATCHES/droidspaces/001.GKI-${KERNEL_VERSION}-fix_sysvipc_kabi.patch"
+  [ -f "$SYSVIPC_PATCH" ] || SYSVIPC_PATCH="$KERNEL_PATCHES/droidspaces/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch"
+  apply_patch_file "$SYSVIPC_PATCH"
   if kernel_version_eq "$KERNEL_VERSION" "5.10"; then
     apply_patch_file "$KERNEL_PATCHES/droidspaces/002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch"
   fi
@@ -208,7 +247,11 @@ fi
 
 if [ "$NH" = "true" ] && ! kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$No_DS" = "false" ]; then
   log "Applying NetHunter patches"
-  apply_patch_file "$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject.patch"
+  # Prefer a variant rebased for this GKI line, else the generic one
+  NH_PATCH="$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject-${KERNEL_VERSION}.patch"
+  [ -f "$NH_PATCH" ] || NH_PATCH="$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject.patch"
+  log "Using $(basename "$NH_PATCH")"
+  apply_patch_file "$NH_PATCH"
   git clone --depth=1 "https://github.com/ahmed-alnassif/rtw88"
   rm -rf "drivers/net/wireless/realtek/rtw88"
   mv rtw88 "drivers/net/wireless/realtek/"
@@ -222,6 +265,8 @@ set -eo pipefail
 if susfs_included && [ "$KSU" = "BSU" ]; then
   log "BakaSU included"
   install_ksu "Baka-SU/BakaSU" "main"
+
+  register_bakasu_susfs_types
 
   clone_susfs
   apply_susfs_patches
@@ -305,14 +350,50 @@ source "$WORKDIR/configs/gki_defconfig.sh"
 if [ "${TODO:-kernel}" = "kernel" ]; then
   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
   SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
-  config --set-str CONFIG_LOCALVERSION "-${KERNEL_NAME}${SUFFIX}"
+  KERNEL_LOCALVERSION="-${KERNEL_NAME}${SUFFIX}"
+
+  # STOCK_NAME: report what a stock kernel reports instead of -GKID-...
+  if [ "${STOCK_NAME:-false}" = "true" ]; then
+    # Don't quietly ship the -GKID- name when a stock one was asked for
+    if ! resolve_stock_identity; then
+      error "STOCK_NAME: no usable stock identity"
+      exit 1
+    fi
+    KERNEL_LOCALVERSION="$STOCK_LOCALVERSION"
+    USER="$STOCK_BUILD_USER"
+    HOST="$STOCK_BUILD_HOST"
+
+    if [ -n "$STOCK_COMPILER" ]; then
+      # Report the stock compiler in /proc/version. mkcompile_h builds that
+      # string from the real compiler; let an exported override win.
+      export KBUILD_BUILD_COMPILER="$STOCK_COMPILER"
+      sed -i \
+        -e 's/"\${CC_VERSION}, \${LD_VERSION}"/"${KBUILD_BUILD_COMPILER:-${CC_VERSION}, ${LD_VERSION}}"/' \
+        -e 's/"\$CC_VERSION, \$LD_VERSION"/"${KBUILD_BUILD_COMPILER:-$CC_VERSION, $LD_VERSION}"/' \
+        scripts/mkcompile_h
+      grep -q "KBUILD_BUILD_COMPILER" scripts/mkcompile_h \
+        || warning "STOCK_NAME: scripts/mkcompile_h not in the expected shape, /proc/version keeps the real compiler"
+    fi
+
+    log "Stock kernel release: ${LINUX_VERSION%.*}.${STOCK_SUBLEVEL:-${LINUX_VERSION##*.}}${KERNEL_LOCALVERSION} (${USER}@${HOST})"
+  fi
+
+  config --set-str CONFIG_LOCALVERSION "$KERNEL_LOCALVERSION"
   config --disable CONFIG_LOCALVERSION_AUTO
   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
 fi
 
 export KBUILD_BUILD_USER="$USER"
 export KBUILD_BUILD_HOST="$HOST"
-export KBUILD_BUILD_TIMESTAMP=$(git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %d %T %z %Y')
+if [ -n "${STOCK_BUILD_TIMESTAMP:-}" ]; then
+  # Build date copied from the stock version line in STOCK_VERSION
+  export KBUILD_BUILD_TIMESTAMP="$STOCK_BUILD_TIMESTAMP"
+elif [ "${STOCK_NAME:-false}" = "true" ]; then
+  # Stock GKI stamps the build time the way `date` prints it, in UTC
+  export KBUILD_BUILD_TIMESTAMP=$(TZ=UTC git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %e %T UTC %Y')
+else
+  export KBUILD_BUILD_TIMESTAMP=$(git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %d %T %z %Y')
+fi
 export KCFLAGS="-w"
 
 LINK_CACHE_PATH="/dev/shm/thinlto-cache"
@@ -326,6 +407,30 @@ MAKE_ARGS=(
   -j$(nproc --all)
   O="$OUTDIR"
 )
+
+# NOTE: STOCK_VERSION may carry an older patch level than the source (e.g. a
+# stock 6.6.127 line against a 6.6.144 tree). We deliberately do NOT change the
+# build's SUBLEVEL to match: reporting a different version than the kernel was
+# built from desyncs vendor modules' vermagic, so the display/touch/modem
+# drivers fail to load and the device bootloops. The real source version is
+# kept; only the name suffix, builder, compiler and date from STOCK_VERSION are
+# applied. The reported release therefore keeps the source patch level.
+if [ -n "${STOCK_SUBLEVEL:-}" ] && [ "$STOCK_SUBLEVEL" != "${LINUX_VERSION##*.}" ]; then
+  warning "STOCK_VERSION patch level $STOCK_SUBLEVEL differs from source ${LINUX_VERSION##*.}; keeping ${LINUX_VERSION##*.} so vendor modules still load"
+fi
+
+# AutoFDO: optimize with the sample profile Google ships in the GKI tree
+# (android15-6.6 and later). Without CLANG_AUTOFDO_PROFILE the kernel only gets
+# the profiling flags and none of the optimization.
+if [ "${AUTOFDO:-true}" = "true" ]; then
+  if grep -q "^config AUTOFDO_CLANG" arch/Kconfig 2>/dev/null && AUTOFDO_PROFILE="$(find_autofdo_profile)"; then
+    log "AutoFDO: using in-tree profile ${AUTOFDO_PROFILE#"$KSRC"/}"
+    config --enable CONFIG_AUTOFDO_CLANG
+    MAKE_ARGS+=(CLANG_AUTOFDO_PROFILE="$AUTOFDO_PROFILE")
+  else
+    log "AutoFDO: no in-tree profile for $KERNEL_VERSION, building without it"
+  fi
+fi
 
 if [ "$KSU" = "FSU" ]; then
   # Trust the FinaSU release manager through the second signature slot, and
@@ -362,6 +467,12 @@ KMI_CHECK="$WORKDIR/py/kmi-check-6.x.py"
 echo "::group::[*] Generating config"
 make ${MAKE_ARGS[@]} "$KERNEL_DEFCONFIG"
 echo "::endgroup::"
+
+# Root/hiding options to report as "not set" in /proc/config.gz (fake_config.patch)
+FAKE_DISABLE_CONFIGS="$(grep -oE '^CONFIG_(KSU|KPM|NOMOUNT|BBG)(_[A-Za-z0-9_]*)?=' "$OUTDIR/.config" | tr -d '=' | tr '\n' ' ' | sed 's/ $//')"
+if [ -n "$FAKE_DISABLE_CONFIGS" ]; then
+  log "Hiding from /proc/config.gz: $FAKE_DISABLE_CONFIGS"
+fi
 
 if susfs_included; then
 
@@ -508,9 +619,28 @@ echo "::endgroup::"
 
 set -eo pipefail
 echo "::group::[*] Building kernel"
-make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++"
+make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++" CONFIG_FAKE_DISABLE="$FAKE_DISABLE_CONFIGS"
 echo "::endgroup::"
 set +eo pipefail
+
+# Vendor modules with mismatched symbol CRCs are force-loaded (see
+# 0003-kernel-module.c patch), so catch KMI breaks here instead of on-device.
+KMI_STG="$KSRC/android/abi_gki_aarch64.stg"
+if [ -f "$KMI_STG" ] && [ -f "$OUTDIR/vmlinux.symvers" ]; then
+  echo "::group::[*] KMI symbol CRC check"
+  python3 "$KMI_CHECK" "$KMI_STG" "$OUTDIR/vmlinux.symvers"
+  KMI_RC=$?
+  echo "::endgroup::"
+  if [ $KMI_RC -ne 0 ]; then
+    if [ "${KMI_STRICT:-false}" = "true" ]; then
+      error "KMI check failed (KMI_STRICT=true)"
+      exit 1
+    fi
+    echo "::warning::KMI check found symbol CRC mismatches; vendor modules may misbehave"
+  fi
+else
+  warning "KMI check skipped: abi_gki_aarch64.stg or vmlinux.symvers not found"
+fi
 
 cd $WORKDIR
 

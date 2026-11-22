@@ -1,0 +1,48 @@
+Subject: [PATCH] unicode: keep ignorable code points during casefold (5.10/5.15 backport)
+
+Backport of WildKernels common/unicode_bypass_fix_6.1+.patch to the
+pre-5.17 utf8-norm.c API (utf8lookup() takes u8c->data instead of
+u8c->um/u8c->n). Logic is otherwise identical: a code point whose
+decomposition is empty (zero-width space, ZWJ, soft hyphen, ...) is no
+longer dropped, so "Android<U+200B>/data" stops matching "Android/data"
+on casefolded filesystems.
+
+---
+diff --git a/fs/unicode/utf8-norm.c b/fs/unicode/utf8-norm.c
+--- a/fs/unicode/utf8-norm.c
++++ b/fs/unicode/utf8-norm.c
+@@ -693,21 +693,21 @@
+ 		if (utf8agetab[LEAF_GEN(leaf)] > u8c->data->maxage) {
+ 			ccc = STOPPER;
+ 		} else if (ccc == DECOMPOSE) {
+-			u8c->len -= utf8clen(u8c->s);
+-			u8c->p = u8c->s + utf8clen(u8c->s);
+-			u8c->s = LEAF_STR(leaf);
+-			/* Empty decomposition implies CCC 0. */
+-			if (*u8c->s == '\0') {
+-				if (u8c->ccc == STOPPER)
+-					continue;
++			// Check if the decomposition result is empty (e.g., zero-width space)
++			if (*LEAF_STR(leaf) == '\0') {
+ 				ccc = STOPPER;
+-				goto ccc_mismatch;
+-			}
++			} else {
++				// Pointer movement and state modification are performed only when it is confirmed that the character is a normal character that needs to be decomposed.
++				u8c->len -= utf8clen(u8c->s);
++				u8c->p = u8c->s + utf8clen(u8c->s);
++				u8c->s = LEAF_STR(leaf);
+ 
+-			leaf = utf8lookup(u8c->data, u8c->hangul, u8c->s);
+-			if (!leaf)
+-				return -1;
+-			ccc = LEAF_CCC(leaf);
++				// Proceed to the next level of searching
++				leaf = utf8lookup(u8c->data, u8c->hangul, u8c->s);
++				if (!leaf)
++					return -1;
++				ccc = LEAF_CCC(leaf);
++			}
+ 		}
+ 
+ 		/*

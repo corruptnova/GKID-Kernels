@@ -1,0 +1,1 @@
+not ported: its 64-byte loop clobbers q0-q5 without kernel_neon_begin() (user FP/SIMD state corruption), and 5.10 already has a non-SIMD memcmp

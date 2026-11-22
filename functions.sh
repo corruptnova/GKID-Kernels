@@ -18,7 +18,7 @@ declare -A GKI_BRANCH=(
 declare -A GKI_AOSP_BRANCH=(
   ["5.10"]="android12-5.10-lts"
   ["5.15"]="android13-5.15-lts"
-  ["6.6"]="android15-6.6-lts"
+  ["6.6"]="android15-6.6"  # main branch: same 6.6.144 LTS level as -lts, but gets Android security fixes first
   ["6.12"]="android16-6.12-lts"
 )
 
@@ -180,6 +180,122 @@ susfs_included() {
   return $?
 }
 
+# Work out the identity a stock kernel reports, for STOCK_NAME builds.
+# STOCK_VERSION may hold:
+#   - the stock kernel's whole version line, as /proc/version prints it or as
+#     found in its boot.img (the leading "Linux version " is optional):
+#       6.6.127-android15-8-g91d825611104-ab16252310-4k (kleaf@build-host)
+#       (<compiler>) #1 SMP PREEMPT Thu Sep  3 03:37:34 UTC 2026
+#     Release, builder, compiler and build date are all copied from it.
+#   - just a release (6.6.127-android15-8-g...-4k) or only its suffix
+#     (-android15-8-g...-4k)
+#   - nothing: the suffix is derived from the source tree. That gives a stock
+#     shaped name, not the one a given device shipped with (no -ab<build id>).
+# Sets STOCK_LOCALVERSION, STOCK_BUILD_USER and STOCK_BUILD_HOST, plus
+# STOCK_SUBLEVEL, STOCK_BUILD_TIMESTAMP and STOCK_COMPILER when the input
+# carried them (empty = keep the build's own).
+# Run from the kernel source root, before CONFIG_LOCALVERSION is overwritten.
+resolve_stock_identity() {
+  local line="${STOCK_VERSION:-}"
+  local release=""
+
+  STOCK_LOCALVERSION=""
+  STOCK_SUBLEVEL=""
+  STOCK_BUILD_USER=""
+  STOCK_BUILD_HOST=""
+  STOCK_BUILD_TIMESTAMP=""
+  STOCK_COMPILER=""
+
+  # Trim surrounding whitespace and the optional "Linux version " prefix
+  line="${line#"${line%%[![:space:]]*}"}"
+  line="${line%"${line##*[![:space:]]}"}"
+  line="${line#Linux version }"
+
+  if [[ "$line" == *" "* ]]; then
+    local re='^([^ ]+) \(([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)\) \((.+)\) #[0-9]+ SMP (PREEMPT[A-Z_]* )?(.+)$'
+    if [[ ! "$line" =~ $re ]]; then
+      error "STOCK_VERSION is not a kernel version line: expected '<release> (<user>@<host>) (<compiler>) #1 SMP PREEMPT <date>'"
+      return 1
+    fi
+    release="${BASH_REMATCH[1]}"
+    STOCK_BUILD_USER="${BASH_REMATCH[2]}"
+    STOCK_BUILD_HOST="${BASH_REMATCH[3]}"
+    STOCK_COMPILER="${BASH_REMATCH[4]}"
+    STOCK_BUILD_TIMESTAMP="${BASH_REMATCH[6]}"
+
+    # Both end up inside C string literals in generated headers
+    if [[ ! "$STOCK_COMPILER" =~ ^[A-Za-z0-9\ .,:/+\(\)_-]+$ ]] || [[ ! "$STOCK_BUILD_TIMESTAMP" =~ ^[A-Za-z0-9\ :+-]+$ ]]; then
+      error "STOCK_VERSION has unexpected characters in its compiler or build date"
+      return 1
+    fi
+  else
+    release="$line"
+  fi
+
+  if [[ "$release" =~ ^([0-9]+\.[0-9]+)\.([0-9]+)(-[A-Za-z0-9._+-]+)$ ]]; then
+    if [ "${BASH_REMATCH[1]}" != "${LINUX_VERSION%.*}" ]; then
+      error "STOCK_VERSION is a ${BASH_REMATCH[1]} kernel, but this build is ${LINUX_VERSION%.*}"
+      return 1
+    fi
+    STOCK_SUBLEVEL="${BASH_REMATCH[2]}"
+    STOCK_LOCALVERSION="${BASH_REMATCH[3]}"
+  elif [[ "$release" =~ ^-[A-Za-z0-9._+-]+$ ]]; then
+    STOCK_LOCALVERSION="$release"
+  elif [ -n "$release" ]; then
+    error "STOCK_VERSION release '$release' must look like 6.6.127-android15-8-g...-4k or -android15-8-g...-4k"
+    return 1
+  else
+    # BRANCH (android15-6.6) and KMI_GENERATION (8) live in one of these two
+    # files depending on the GKI line.
+    local branch="" kmi_gen="" f
+    for f in build.config.constants build.config.common; do
+      [ -f "$f" ] || continue
+      [ -n "$branch" ] || branch=$(sed -n 's/^BRANCH=//p' "$f" | head -n1)
+      [ -n "$kmi_gen" ] || kmi_gen=$(sed -n 's/^KMI_GENERATION=//p' "$f" | head -n1)
+    done
+    [ -n "$branch" ] || branch="${GKI_BRANCH[$KERNEL_VERSION]:-}"
+
+    local android_release sha
+    android_release=$(echo "$branch" | sed -n 's/^\(android[0-9]\{2,\}\)-.*/\1/p')
+    sha=$(git rev-parse --short=12 HEAD 2>/dev/null)
+
+    if [ -z "$android_release" ] || [[ ! "$kmi_gen" =~ ^[0-9]+$ ]] || [ -z "$sha" ]; then
+      error "Could not derive a stock release (BRANCH='$branch' KMI_GENERATION='$kmi_gen' sha='$sha')"
+      return 1
+    fi
+
+    # Stock defconfigs may add their own suffix (6.6+: "-4k"), keep it at the end
+    local defconfig_suffix
+    defconfig_suffix=$(sed -n 's/^CONFIG_LOCALVERSION="\(.*\)"$/\1/p' "$DEFCONFIG_FILE" | tail -n1)
+
+    STOCK_LOCALVERSION="-${android_release}-${kmi_gen}-g${sha}${defconfig_suffix}"
+  fi
+
+  if [ -z "$STOCK_BUILD_USER" ]; then
+    # Kleaf built kernels report kleaf@build-host (seen on a stock Pixel 10
+    # 6.6 kernel); the older build.sh lines report build-user@build-host.
+    if kernel_version_ge "$KERNEL_VERSION" "6.6"; then
+      STOCK_BUILD_USER="kleaf"
+    else
+      STOCK_BUILD_USER="build-user"
+    fi
+    STOCK_BUILD_HOST="build-host"
+  fi
+}
+
+# Print the path of the AutoFDO profile shipped in the kernel tree, if any
+# (android15-6.6: android/gki/..., android16-6.12: gki/...).
+find_autofdo_profile() {
+  local p
+  for p in gki/aarch64/afdo/kernel.afdo android/gki/aarch64/afdo/kernel.afdo; do
+    if [ -f "$KSRC/$p" ]; then
+      echo "$KSRC/$p"
+      return 0
+    fi
+  done
+  return 1
+}
+
 simplify_gh_url() {
   local URL="$1"
   echo "$URL" | sed "s|https://github.com/||g" | sed "s|.git||g"
@@ -318,19 +434,41 @@ apply_kernel_patches() {
     local patches=()
     while IFS= read -r -d '' patch; do
         patches+=("$patch")
-    done < <(find "$patch_dir" -type f \( -name "*.patch" -o -name "*.diff" \) -print0 | sort -z -V)
+    done < <(find "$patch_dir" -maxdepth 1 -type f \( -name "*.patch" -o -name "*.diff" \) -print0 | sort -z -V)
 
     [[ ${#patches[@]} -eq 0 ]] && { warning "No patches found in $patch_dir"; return 0; }
 
     info "Found ${#patches[@]} patches in $patch_dir"
 
+    # Per-GKI-line overrides live in $patch_dir/$KERNEL_VERSION/:
+    #   <name>.patch  replaces the generic <name>.patch for this kernel
+    #   <name>.skip   skips <name>.patch for this kernel (file holds the reason)
+    local ver_dir="$patch_dir/${KERNEL_VERSION:-none}"
+    local skipped=0
+
     for patch in "${patches[@]}"; do
+        local name base
+        name=$(basename "$patch")
+        base="${name%.*}"
+
+        if [[ -f "$ver_dir/$base.skip" ]]; then
+            info "Skipping $name on $KERNEL_VERSION: $(head -n1 "$ver_dir/$base.skip")"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
+        if [[ -f "$ver_dir/$name" ]]; then
+            info "Using $KERNEL_VERSION variant of $name"
+            patch="$ver_dir/$name"
+        fi
+
         if ! apply_patch_file "$patch"; then
             ((failed++))
         fi
     done
 
-    [[ $failed -eq 0 ]] && success "All patches applied successfully" || warning "Applied $((${#patches[@]} - failed))/${#patches[@]} patches, $failed failed"
+    local total=$((${#patches[@]} - skipped))
+    [[ $failed -eq 0 ]] && success "All patches applied successfully" || warning "Applied $((total - failed))/$total patches, $failed failed"
     return $failed
 }
 
@@ -389,6 +527,59 @@ PYEOF
         success "Force load module patch applied to $file"
     else
         warning "Force load module patch pattern not found in $file (source may differ from expected) - skipping"
+        return 1
+    fi
+}
+
+# Same change as 0019-wakeup-Avoid-excessive-s2idle-wake-attempts-in.patch,
+# done by matching pm_system_wakeup()'s statements instead of diff context,
+# so vendor/Android lines around them (e.g. suspend_abort_fs_sync()) don't
+# break it. Only call s2idle_wake() on the first pending abort.
+apply_s2idle_wake_gate() {
+    local file="drivers/base/power/wakeup.c"
+
+    if [[ ! -f "$file" ]]; then
+        warning "$file not found - skipping s2idle wake gate"
+        return 0
+    fi
+
+    python3 - "$file" <<'PYEOF'
+import re
+import sys
+
+path = sys.argv[1]
+src = open(path).read()
+
+m = re.search(r'^void pm_system_wakeup\(void\)\n\{\n(.*?)^\}\n', src, re.M | re.S)
+if not m:
+    print("FUNC_NOT_FOUND", file=sys.stderr)
+    sys.exit(1)
+
+body = m.group(1)
+if "atomic_inc_return_relaxed(&pm_abort_suspend)" in body:
+    sys.exit(2)
+
+inc = "\tatomic_inc(&pm_abort_suspend);\n"
+wake = "\ts2idle_wake();\n"
+if body.count(inc) != 1 or body.count(wake) != 1 or body.index(inc) > body.index(wake):
+    sys.stderr.write("UNEXPECTED_BODY\n" + m.group(0))
+    sys.exit(1)
+
+new_body = ("\tunsigned int abort_count;\n\n"
+            + body.replace(inc, "\tabort_count = atomic_inc_return_relaxed(&pm_abort_suspend);\n")
+                  .replace(wake, "\tif (abort_count == 1)\n\t\ts2idle_wake();\n"))
+src = src[:m.start(1)] + new_body + src[m.end(1):]
+open(path, "w").write(src)
+PYEOF
+
+    local rc=$?
+    if [[ $rc -eq 2 ]]; then
+        success "s2idle wake gate already present in $file"
+    elif [[ $rc -eq 0 ]]; then
+        success "s2idle wake gate applied to $file"
+        sed -n '/^void pm_system_wakeup(void)/,/^}/p' "$file"
+    else
+        warning "s2idle wake gate not applied: pm_system_wakeup() in $file is not in the expected shape (see above)"
         return 1
     fi
 }
@@ -581,6 +772,41 @@ apply_susfs_patches() {
 
     SUSFS_VERSION=$(grep -E '^#define SUSFS_VERSION' ./include/linux/susfs.h | cut -d' ' -f3 | sed 's/"//g')
     echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
+}
+
+# BakaSU injects its own SELinux types ("ksu"/"ksu_file") and every module
+# sepolicy.rule type (e.g. "xposed_file"/"xposed_data") through add_type()/
+# add_rule_raw() in kernel/selinux/sepolicy.c, but — unlike stock KernelSU via
+# 10_enable_susfs_for_ksu.patch — it never registers them with SuSFS. Without
+# that registration SuSFS's selinuxfs context/access hooks have nothing to hide,
+# so the DirtySepolicy oracle still validates u:r:ksu:s0 etc. even with
+# selinux_hide enabled. Wire the two injection chokepoints to SuSFS. No-op when
+# BakaSU already does this upstream (grep guard) or on non-SuSFS builds.
+register_bakasu_susfs_types() {
+    local ksu_dir="KernelSU"
+    local sepolicy="$ksu_dir/kernel/selinux/sepolicy.c"
+    local patch="$PATCHES_DIR/0001-feat-susfs-register-injected-sepolicy-types.patch"
+    local start="$PWD"
+
+    if [ ! -f "$sepolicy" ]; then
+        error "BakaSU sepolicy.c not found at $sepolicy"
+        return 1
+    fi
+
+    if grep -q "susfs_add_sus_type" "$sepolicy"; then
+        success "BakaSU already registers injected sepolicy types with SuSFS, skipping"
+        return 0
+    fi
+
+    log "Wiring BakaSU sepolicy injection into SuSFS (sus_type + avd spoof)"
+    cd "$ksu_dir"
+    if ! apply_patch_file "$patch"; then
+        cd "$start"
+        error "Failed to register BakaSU injected sepolicy types with SuSFS"
+        return 1
+    fi
+    cd "$start"
+    success "BakaSU sepolicy types registered with SuSFS"
 }
 
 clone_susfs() {

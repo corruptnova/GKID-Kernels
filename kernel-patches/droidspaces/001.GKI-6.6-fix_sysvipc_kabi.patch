@@ -1,0 +1,34 @@
+Rebased copy of 001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch for 6.6: android15-6.6 now uses KABI slots 1-2 and has a CONFIG_RV block after the reserves, so the generic patch needed fuzz 2
+Same change: SYSVIPC fields move into ANDROID_KABI slots 6 (sysv_sem) and 7+8 (sysv_shm).
+
+---
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1073,8 +1073,8 @@
+ 	struct nameidata		*nameidata;
+ 
+ #ifdef CONFIG_SYSVIPC
+-	struct sysv_sem			sysvsem;
+-	struct sysv_shm			sysvshm;
++	// struct sysv_sem			sysvsem;
++	// struct sysv_shm			sysvshm;
+ #endif
+ #ifdef CONFIG_DETECT_HUNG_TASK
+ 	unsigned long			last_switch_count;
+@@ -1527,9 +1527,15 @@
+ 	ANDROID_KABI_RESERVE(3);
+ 	ANDROID_KABI_RESERVE(4);
+ 	ANDROID_KABI_RESERVE(5);
++
++#ifdef CONFIG_SYSVIPC
++	ANDROID_KABI_USE(6, struct sysv_sem sysvsem);
++	_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8), struct sysv_shm sysvshm);
++#else
+ 	ANDROID_KABI_RESERVE(6);
+ 	ANDROID_KABI_RESERVE(7);
+ 	ANDROID_KABI_RESERVE(8);
++#endif
+ 
+ #ifdef CONFIG_RV
+ 	/*
