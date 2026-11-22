@@ -26,6 +26,10 @@ KSRC="$WORKDIR/ksrc"
 KERNEL_PATCHES="$WORKDIR/kernel-patches"
 PATCHES_DIR="$WORKDIR/patches"
 
+# FinaSU develops on dev; set FINASU_REF to a tag (e.g. v1.7.0) to pin it
+FINASU_REPO="LyraVoid/FinaSU"
+FINASU_REF="${FINASU_REF:-dev}"
+
 source $WORKDIR/functions.sh
 
 if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
@@ -75,6 +79,7 @@ log "Setting Kernel variant"
 case "$KSU" in
   "SKSU") VARIANT="SukiSU-Ultra" ;;
   "BSU") VARIANT="BakaSU" ;;
+  "FSU") VARIANT="FinaSU" ;;
   "KSU") VARIANT="KernelSU" ;;
   "no") VARIANT="Vanilla" ;;
   "vnlto") VARIANT="Vanilla+NoLTO" ;;
@@ -110,6 +115,7 @@ fi
 generate_gh_changelog "maxsteeel/nomount" "master" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
 generate_gh_changelog "Baka-SU/BakaSU" "main" 5 "$RELEASE_DIR/BakaSU_changelog.txt"
+generate_gh_changelog "$FINASU_REPO" "$FINASU_REF" 5 "$RELEASE_DIR/FinaSU_changelog.txt"
 
 echo "::group::[*] Downloading Clang"
 CLANG_BIN="$WORKDIR/neutron-clang/bin"
@@ -267,6 +273,19 @@ if susfs_included && [ "$KSU" = "BSU" ]; then
 
 fi
 
+if [ "$KSU" = "FSU" ]; then
+  log "FinaSU included"
+  install_ksu "$FINASU_REPO" "$FINASU_REF"
+  resolve_finasu_manager_cert "$FINASU_REPO" || exit 1
+
+  if susfs_included; then
+    # FinaSU carries the KernelSU side of SUSFS in-tree, so only the kernel
+    # side is applied here (no 10_enable_susfs_for_ksu.patch)
+    clone_susfs
+    apply_susfs_patches
+  fi
+fi
+
 if [ "$KSU" = "KSU" ]; then
   log "KernelSU included"
   if ! susfs_included; then
@@ -311,7 +330,11 @@ fi
 
 echo "VARIANT=$VARIANT" >> $GITHUB_ENV
 
-if [ "$NM" = "true" ]; then
+if [ "$NM" = "true" ] && [ "$KSU" = "FSU" ]; then
+  # FinaSU loads its own NoMount driver; a built-in one below the API it
+  # requires can't be replaced at runtime and would block it
+  warning "Skipping built-in NoMount: FinaSU ships its own"
+elif [ "$NM" = "true" ]; then
   log "Applying NoMount"
   curl "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh" | bash -s master
 fi
@@ -409,6 +432,17 @@ if [ "${AUTOFDO:-true}" = "true" ]; then
   fi
 fi
 
+if [ "$KSU" = "FSU" ]; then
+  # Trust the FinaSU release manager through the second signature slot, and
+  # fail the build instead of silently dropping preinit if UAPI headers are missing
+  MAKE_ARGS+=(
+    KSU_EXPECTED_SIZE2="$FINASU_CERT_SIZE"
+    KSU_EXPECTED_HASH2="$FINASU_CERT_HASH"
+    KSU_SECOND_SIGNATURE_RELEASE=1
+    KSU_REQUIRE_PREINIT=1
+  )
+fi
+
 if [ "${LTO:-}" = "thinLTO" ] && [ "$CLEAN_LTO_CACHE" = "true" ]; then
   rm -rf "$LINK_CACHE_PATH"
   success "ThinLTO cache removed"
@@ -456,6 +490,20 @@ if susfs_included; then
     grep "depends on" $(find . -name "Kconfig" -exec grep -l "KSU_SUSFS" {} \;) 2>/dev/null || error "No dependency info found"
   fi
 
+fi
+
+if [ "$KSU" = "FSU" ]; then
+  # Kconfig drops these without a warning, so check the final .config
+  log "DEBUG: Checking .config for FinaSU"
+  FSU_REQUIRED=(CONFIG_KSU=y CONFIG_KALLSYMS_ALL=y CONFIG_HEADERS_INSTALL=y)
+  susfs_included && FSU_REQUIRED+=(CONFIG_KSU_HOOK_SUSFS_INLINE=y)
+  for opt in "${FSU_REQUIRED[@]}"; do
+    if ! grep -qx "$opt" "$OUTDIR/.config"; then
+      error "$opt missing from .config"
+      exit 1
+    fi
+  done
+  success "FinaSU options present: ${FSU_REQUIRED[*]}"
 fi
 
 if [ "$TEST" = "yes" ]; then

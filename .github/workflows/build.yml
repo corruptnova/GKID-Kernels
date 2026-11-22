@@ -112,12 +112,13 @@ jobs:
       - name: Generate build matrix
         id: set-matrix
         env:
-          # CI builds only GKI 6.6 with BakaSU + SUSFS.
+          # CI builds only GKI 6.6 with BakaSU + SUSFS and FinaSU + SUSFS.
           KERNEL_VERSION: "6.6"
           BUILD_VANILLA: "false"
           BUILD_KSU: "false"
           BUILD_KSU_SUSFS: "true"
-          VARIANTS: "BSU+SUSFS"
+          BUILD_FSU_SUSFS: "true"
+          VARIANTS: "BSU+SUSFS,FSU+SUSFS"
         run: |
           python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
 
