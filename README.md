@@ -166,7 +166,7 @@ To make it permanent, put the command in a script in `/data/adb/service.d/`.
 
 ## Building
 
-Builds run on GitHub Actions. Open the Actions tab, select the build workflow ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a pre-release.
+Builds run on GitHub Actions. Open the Actions tab, select the build workflow ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a pre-release with all the lines it built. Jobs run two at a time, so an `All` run (10 jobs) takes about five times as long as a single line.
 
 | Input | Default | What it does |
 |---|---|---|

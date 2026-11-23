@@ -139,6 +139,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Each job downloads and uploads a multi-GB ccache archive on the same
+      # release; running the whole matrix at once gets throttled by GitHub.
+      max-parallel: 2
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     steps:
