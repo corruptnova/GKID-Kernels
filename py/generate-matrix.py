@@ -56,21 +56,18 @@ def get_env_bool(var_name: str, default: bool = False) -> bool:
 	return value in ("true", "1", "yes", "on")
 
 def resolve_kernel_versions() -> List[str]:
-	"""Read KERNEL_VERSION: 'All', one line, or a comma-separated list."""
 	selected = os.environ.get("KERNEL_VERSION", "All").strip()
 
 	if not selected or selected.lower() == "all":
 		return ALL_KERNEL_VERSIONS
 
-	wanted = [v.strip() for v in selected.split(",") if v.strip()]
-	unknown = [v for v in wanted if v not in ALL_KERNEL_VERSIONS]
-	if unknown or not wanted:
+	if selected not in ALL_KERNEL_VERSIONS:
 		raise ValueError(
 			f"Unknown KERNEL_VERSION='{selected}'. "
-			f"Expected 'All' or a comma-separated list of: {', '.join(ALL_KERNEL_VERSIONS)}"
+			f"Expected 'All' or one of: {', '.join(ALL_KERNEL_VERSIONS)}"
 		)
 
-	return [v for v in ALL_KERNEL_VERSIONS if v in wanted]
+	return [selected]
 
 def filter_variants(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 	"""Keep only the variants named in VARIANTS (comma-separated), if set."""
