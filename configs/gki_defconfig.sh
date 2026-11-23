@@ -7,19 +7,16 @@ function apply_config(){
   cat "$1" >> "$2"
 }
 
-if [ "$KSU" = "FSU" ]; then
-  # FinaSU has no KPM support
-  echo "⚙️ Added FinaSU configuration"
-  echo "CONFIG_KSU=y" >> $DEFCONFIG
-  apply_config "$WORKDIR/configs/finasu.config" "$DEFCONFIG"
-elif [ "$KSU" != "no" ]; then
-  # Base KSU Config & Dependencies
-  echo "⚙️ Added KSU configuration"
-  cat >> $DEFCONFIG <<EOF
-CONFIG_KSU=y
-CONFIG_KPM=y
-EOF
-fi
+case "$KSU" in
+  no|vnlto) ;;  # Vanilla builds have no root
+  *)
+    echo "⚙️ Added KSU configuration"
+    echo "CONFIG_KSU=y" >> $DEFCONFIG
+    if [ "$KSU" = "FSU" ]; then
+      apply_config "$WORKDIR/configs/finasu.config" "$DEFCONFIG"
+    fi
+    ;;
+esac
 
 echo "🧩 Adding Built-in Features"
 if [ "$KSU" = "FSU" ]; then

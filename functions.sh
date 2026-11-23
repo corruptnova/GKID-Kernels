@@ -172,11 +172,6 @@ resolve_finasu_manager_cert() {
   success "FinaSU manager certificate: size=$FINASU_CERT_SIZE sha256=$FINASU_CERT_HASH"
 }
 
-ksu_included() {
-  [ "$KSU" == "yes" ]
-  return $?
-}
-
 susfs_included() {
   [ "$KSU_SUSFS" == "true" ]
   return $?
@@ -755,12 +750,6 @@ apply_susfs_patches() {
 
     cp -R $SUSFS_PATCHES/fs/* ./fs
     cp -R $SUSFS_PATCHES/include/linux/* ./include/linux/
-
-    if [ "$SUSFS_PATCH" = "gki-android14-6.1" ]; then
-      cd $SUSFS_DIR
-      apply_patch_file "$KERNEL_PATCHES/susfs/susfs_fs_namespace_fix.patch" || true
-      cd $OLDPWD
-    fi
 
     if ! patch -p1 --fuzz=3 < "$SUSFS_PATCHES/50_add_susfs_in_${SUSFS_PATCH}.patch"; then
         if [ "$KERNEL_KMI" = "android13-5.15" ]; then

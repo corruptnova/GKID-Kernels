@@ -98,7 +98,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
   - Reports a stock-style release (for example `-android15-8-g…`) instead of the project name.
   - Can copy a stock kernel's builder, compiler and build date.
   - Always keeps the real patch level, because faking it stops vendor modules from loading and bootloops the phone.
-- **CI:** builds the BakaSU and FinaSU variants for the kernel line you pick, or all lines. Telegram posting is removed.
+- **CI:** builds the BakaSU and FinaSU variants for the kernel line you pick, or all lines. Telegram posting and the Telegram upload workflow are removed.
 
 **Security and hiding**
 - **Hardening (KMI-safe):** heap memory is zeroed on free, the kernel stack offset is randomized on every syscall, and call-used registers are zeroed on return.
@@ -112,12 +112,13 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **Dropped patches:** `int_sqrt` (slower and wrong for very large inputs) and `lib/string` (unused on arm64).
 - **Patch rebases:** patches are rebased per GKI line and checked against current AOSP.
 - **Post-flash check:** added the on-device check script.
+- **Build identity:** kernels report your repo's owner as the builder (`/proc/version`), use UTC for release dates, and no longer credit GKID's author as the builder in the installer.
 
 ## What's inside
 
 **Performance**
 - 300 Hz timer
-- MGLRU forced on
+- MGLRU forced on (5.15 and later; 5.10 doesn't have it)
 - zRAM with LZ4 and writeback
 - schedutil and ondemand governors
 - mq-deadline I/O scheduler

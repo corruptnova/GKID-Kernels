@@ -3,7 +3,7 @@ name: Feature Request
 about: Suggest a new kernel feature, optimization, or compatibility improvement
 title: "[FEAT]: "
 labels: enhancement
-assignees: ahmed-alnassif
+assignees: ''
 
 ---
 
@@ -20,9 +20,9 @@ A clear and concise description of what you want to happen. Be specific about:
 Any alternative solutions, workarounds, or patches you've tried.
 
 **Device & Environment (if relevant)**
-- **Device:** [e.g., Poco X6 Pro (duchamp)]
+- **Device:** [e.g., Pixel 9 (tokay)]
 - **ROM:** [e.g., HyperOS 3.0, AOSP 16]
-- **Current kernel variant:** [e.g., KernelSU, Vanilla]
+- **Current kernel zip:** [e.g., `GKID-BakaSU+SuSFS-…-6.1.182.zip`]
 
 **Additional context**
 - Links to relevant patches, commits, or upstream discussions

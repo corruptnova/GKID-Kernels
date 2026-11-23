@@ -3,7 +3,7 @@ name: Kernel Bug Report
 about: Report boot issues, crashes, or feature malfunctions
 title: "[BUG]: "
 labels: bug
-assignees: ahmed-alnassif
+assignees: ''
 
 ---
 
@@ -11,14 +11,15 @@ assignees: ahmed-alnassif
 A clear and concise description of the issue (e.g., bootloop, WiFi not working, random reboot).
 
 **Device & Environment**
-- **Device:** [e.g., Poco X6 Pro (duchamp)]
+- **Device:** [e.g., Pixel 9 (tokay)]
 - **ROM:** [e.g., HyperOS 3.0, AOSP 16]
-- **Kernel variant:** [e.g., KernelSU, KernelSU Next, SukiSU Ultra, Vanilla, BakaSU]
-- **Kernel version:** [e.g., `6.1.175-GKID/v26.07.26-r443/349b806bc`]
+- **Kernel zip:** [the file you flashed, e.g., `GKID-FinaSU+SuSFS-v26.11.23-r22-6.6.144.zip`]
+- **Kernel version:** [output of `uname -r`, e.g., `6.6.144-GKID-r22-a1b2c3d4e5f6`]
+- **Stock kernel version:** [`uname -r` before flashing, e.g., `6.6.57-android15-8-g…`]
 
 **To Reproduce**
 Steps to reproduce the behavior:
-1. Flash kernel via KernelSU app or Kernel Flasher or `fastboot`
+1. Flash the zip via your root manager's Install AnyKernel3, a custom recovery, or a kernel flasher app
 2. Reboot device
 3. [Describe what triggers the issue]
 
@@ -32,8 +33,9 @@ Please provide **BOTH** logs as a **single ZIP file**:
 3. **Zip both files** and attach here
 
 **Screenshots**
-If applicable, add screenshots of error messages or KernelSU manager.
+If applicable, add screenshots of error messages or of your root manager (FinaSU / BakaSU).
 
 **Additional context**
-- Does the issue occur on specific variants only?
+- Does the issue occur on one variant only (FinaSU or BakaSU)?
+- Output of `scripts/post-flash-check.sh`, if you could run it
 - Any recent changes before the bug appeared?

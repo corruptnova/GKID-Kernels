@@ -3,10 +3,13 @@
 WORKDIR="$(pwd)"
 RELEASE_DIR="$WORKDIR/artifacts"
 
+# Project name: zip names, release names and the kernel's -NAME-rN release suffix
 KERNEL_NAME="GKID"
-USER="ahmed-alnassif"
-HOST="GKID"
-TIMEZONE="Asia/Damascus"
+# Shown in /proc/version as builder@host; forks get their own owner name
+BUILD_USER="${GITHUB_REPOSITORY_OWNER:-builder}"
+BUILD_HOST="$KERNEL_NAME"
+# Release tags and build timestamps use this time zone
+TIMEZONE="UTC"
 ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 
 KERNEL_DEFCONFIG="gki_defconfig"
@@ -66,7 +69,6 @@ cd $WORKDIR
 
 log "Setting Kernel variant"
 case "$KSU" in
-  "SKSU") VARIANT="SukiSU-Ultra" ;;
   "BSU") VARIANT="BakaSU" ;;
   "FSU") VARIANT="FinaSU" ;;
   "KSU") VARIANT="KernelSU" ;;
@@ -262,10 +264,8 @@ if [ "$KSU" = "KSU" ]; then
     apply_patch_file "$PATCHES_DIR/0001-feat-escape-persistent_allow_list-to-kthread.patch"
     apply_patch_file "$PATCHES_DIR/0001-feat-supercalls-allow-userspace-to-pull-list-entries.patch"
     sed -i "/    git pull && echo \"\[+\] Repository updated.\"/d" "kernel/setup.sh"
-    git config --global user.email "mr.ahmed.nassif@gmail.com"
-    git config --global user.name "Ahmed Al-Nassif"
     git add .
-    git commit -m "susfs patch"
+    git -c user.name="CI" -c user.email="ci@localhost" commit -q -m "susfs patch"
     cd ..
     bash "KernelSU/kernel/setup.sh" "main"
 
@@ -307,16 +307,16 @@ if [ "${TODO:-kernel}" = "kernel" ]; then
   SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
   KERNEL_LOCALVERSION="-${KERNEL_NAME}${SUFFIX}"
 
-  # STOCK_NAME: report what a stock kernel reports instead of -GKID-...
+  # STOCK_NAME: report what a stock kernel reports instead of -${KERNEL_NAME}-rN-...
   if [ "${STOCK_NAME:-false}" = "true" ]; then
-    # Don't quietly ship the -GKID- name when a stock one was asked for
+    # Don't quietly ship the project name when a stock one was asked for
     if ! resolve_stock_identity; then
       error "STOCK_NAME: no usable stock identity"
       exit 1
     fi
     KERNEL_LOCALVERSION="$STOCK_LOCALVERSION"
-    USER="$STOCK_BUILD_USER"
-    HOST="$STOCK_BUILD_HOST"
+    BUILD_USER="$STOCK_BUILD_USER"
+    BUILD_HOST="$STOCK_BUILD_HOST"
 
     if [ -n "$STOCK_COMPILER" ]; then
       # Report the stock compiler in /proc/version. mkcompile_h builds that
@@ -338,8 +338,8 @@ if [ "${TODO:-kernel}" = "kernel" ]; then
   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
 fi
 
-export KBUILD_BUILD_USER="$USER"
-export KBUILD_BUILD_HOST="$HOST"
+export KBUILD_BUILD_USER="$BUILD_USER"
+export KBUILD_BUILD_HOST="$BUILD_HOST"
 if [ -n "${STOCK_BUILD_TIMESTAMP:-}" ]; then
   # Build date copied from the stock version line in STOCK_VERSION
   export KBUILD_BUILD_TIMESTAMP="$STOCK_BUILD_TIMESTAMP"
@@ -604,7 +604,7 @@ git clone -q --depth=1 $ANYKERNEL_REPO anykernel
 
 AK3_ZIP_NAME=${AK3_ZIP_NAME//REL/$RELEASE}
 sed -i \
-  -e "s/kernel.string=.*/kernel.string=${KERNEL_NAME} ${RELEASE} ${LINUX_VERSION} ${VARIANT} by Ahmed Al-Nassif (ahmed-alnassif)/g" \
+  -e "s/kernel.string=.*/kernel.string=${KERNEL_NAME} ${RELEASE} ${LINUX_VERSION} ${VARIANT}/g" \
   -e "s/supported_kernel=\".*\"/supported_kernel=\"${KERNEL_VERSION}\"/g" \
   $WORKDIR/anykernel/anykernel.sh
 
