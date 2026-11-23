@@ -31,17 +31,30 @@ on:
           - "thinLTO"
           - "fullLTO"
 
-      KERNEL_VERSION:
-        description: "GKI kernel line to build"
-        default: "All"
-        type: choice
-        options:
-          - "All"
-          - "5.10"
-          - "5.15"
-          - "6.1"
-          - "6.6"
-          - "6.12"
+      KERNEL_5_10:
+        description: "Build GKI 5.10 (Android 12)"
+        type: boolean
+        default: true
+
+      KERNEL_5_15:
+        description: "Build GKI 5.15 (Android 13)"
+        type: boolean
+        default: true
+
+      KERNEL_6_1:
+        description: "Build GKI 6.1 (Android 14)"
+        type: boolean
+        default: true
+
+      KERNEL_6_6:
+        description: "Build GKI 6.6 (Android 15)"
+        type: boolean
+        default: true
+
+      KERNEL_6_12:
+        description: "Build GKI 6.12 (Android 16)"
+        type: boolean
+        default: true
 
       CLEAN_LTO_CACHE:
         description: "Clean ThinLTO cache to fix .config bug"
@@ -124,14 +137,31 @@ jobs:
       - name: Generate build matrix
         id: set-matrix
         env:
-          # CI builds BakaSU + SUSFS and FinaSU + SUSFS for the selected GKI line(s).
-          KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
+          # CI builds BakaSU + SUSFS and FinaSU + SUSFS for every ticked GKI line.
+          KERNEL_5_10: ${{ inputs.KERNEL_5_10 }}
+          KERNEL_5_15: ${{ inputs.KERNEL_5_15 }}
+          KERNEL_6_1: ${{ inputs.KERNEL_6_1 }}
+          KERNEL_6_6: ${{ inputs.KERNEL_6_6 }}
+          KERNEL_6_12: ${{ inputs.KERNEL_6_12 }}
           BUILD_VANILLA: "false"
           BUILD_KSU: "false"
           BUILD_KSU_SUSFS: "true"
           BUILD_FSU_SUSFS: "true"
           VARIANTS: "BSU+SUSFS,FSU+SUSFS"
         run: |
+          versions=()
+          for v in 5.10 5.15 6.1 6.6 6.12; do
+            var="KERNEL_${v//./_}"
+            if [ "${!var}" = "true" ]; then
+              versions+=("$v")
+            fi
+          done
+          if [ ${#versions[@]} -eq 0 ]; then
+            echo "::error::Tick at least one kernel line to build"
+            exit 1
+          fi
+          export KERNEL_VERSION="$(IFS=,; echo "${versions[*]}")"
+          echo "Building kernel lines: $KERNEL_VERSION"
           python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
 
   build:

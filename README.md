@@ -97,7 +97,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
   - Reports a stock-style release (for example `-android15-8-g…`) instead of the project name.
   - Can copy a stock kernel's builder, compiler and build date.
   - Always keeps the real patch level, because faking it stops vendor modules from loading and bootloops the phone.
-- **CI:** builds the BakaSU and FinaSU variants for the kernel line you pick, or all lines. Telegram posting is removed.
+- **CI:** builds the BakaSU and FinaSU variants for whichever kernel lines you tick. Telegram posting is removed.
 
 **Security and hiding**
 - **Hardening (KMI-safe):** heap memory is zeroed on free, the kernel stack offset is randomized on every syscall, and call-used registers are zeroed on return.
@@ -166,14 +166,14 @@ To make it permanent, put the command in a script in `/data/adb/service.d/`.
 
 ## Building
 
-Builds run on GitHub Actions. Open the Actions tab, select the build workflow ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a pre-release with all the lines it built. Jobs run two at a time, so an `All` run (10 jobs) takes about five times as long as a single line.
+Builds run on GitHub Actions. Open the Actions tab, select the build workflow ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a pre-release with all the lines it built. Each ticked line builds both variants. Jobs run two at a time, so all five lines (10 jobs) take about five times as long as one line.
 
 | Input | Default | What it does |
 |---|---|---|
 | `TODO` | `kernel` | `kernel` builds and releases; `defconfig` only exports the generated config |
 | `TEST` | `no` | `yes` runs the pipeline without compiling |
 | `LTO` | `fullLTO` | `fullLTO`, `thinLTO` or `noneLTO` |
-| `KERNEL_VERSION` | `All` | Kernel line to build: `All`, `5.10`, `5.15`, `6.1`, `6.6` or `6.12` |
+| `KERNEL_5_10` … `KERNEL_6_12` | all on | One checkbox per kernel line (5.10, 5.15, 6.1, 6.6, 6.12). Tick the lines you want |
 | `CLEAN_LTO_CACHE` | on | Clears the ThinLTO cache first |
 | `DROIDSPACES` | on | DroidSpaces support |
 | `NH` | on | NetHunter drivers and patches |
