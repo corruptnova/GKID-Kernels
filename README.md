@@ -23,7 +23,7 @@ Check Settings → About phone → Kernel version, or run `uname -r`, and downlo
 > [!IMPORTANT]
 > Only the KMIs in the table are built. Devices on `android13-5.10` or `android14-5.15` have the same Linux version but a different KMI. The installer won't stop you, but vendor modules may not load.
 
-The 6.1 builds use GKID's [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1) tree. The other lines build from AOSP's GKI branches.
+Every line builds from AOSP's GKI kernel source.
 
 > [!WARNING]
 > Back up your stock `boot.img` before flashing. If a build doesn't boot, flashing it back from recovery or fastboot is the way out.
@@ -90,7 +90,8 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **BakaSU SELinux types:** the types BakaSU injects (`ksu`, `ksu_file` and module types) are registered with SuSFS, so SELinux context probes such as Duck Detector's can't confirm them.
 
 **Kernel source and build**
-- **Source branch:** GKI 6.6 builds from `android15-6.6` instead of `android15-6.6-lts`. The patch level is the same, but Android security fixes land there first.
+- **6.1 source:** built from AOSP's `android14-6.1` instead of GKID's [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1) device tree. 6.1 now gets the same patch set as the other lines and AOSP fixes as soon as they land, instead of waiting for the device tree to be merged by hand.
+- **Source branches:** 6.1 and 6.6 build from the main GKI branches (`android14-6.1`, `android15-6.6`), which Google builds GKI releases from and which get Android security fixes first. GKID used `android15-6.6-lts` for 6.6.
 - **AutoFDO:** uses the sample profile Google ships in the GKI tree (6.6 and 6.12).
 - **KMI check:** symbol CRCs are checked after each build. By default this only warns.
 - **Stock-style kernel name (optional, `STOCK_NAME`):**
