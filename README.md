@@ -1,320 +1,201 @@
-# GKID Kernel
+# [Project name]
 
-<p align="center">
-  <img src="docs/banner.png" alt="GKID Kernels Banner">
-</p>
+GKI kernels for Android devices on Linux 6.6 (`android15-6.6`), with FinaSU or BakaSU root, SuSFS hiding, KMI-safe hardening and performance tuning.
 
-[![Build Status](https://github.com/ahmed-alnassif/GKID-Kernels/actions/workflows/build.yml/badge.svg)](https://github.com/ahmed-alnassif/GKID-Kernels/actions/workflows/build.yml)
-[![Latest Release](https://img.shields.io/github/v/release/ahmed-alnassif/GKID-Kernels?label=Latest%20Release&color=00aa00)](https://github.com/ahmed-alnassif/GKID-Kernels/releases)
-[![Downloads](https://img.shields.io/github/downloads/ahmed-alnassif/GKID-Kernels/total?label=Downloads&color=00aa00)](https://github.com/ahmed-alnassif/GKID-Kernels/releases)
-[![Group](https://img.shields.io/badge/Telegram-Group-blue.svg?logo=telegram)](https://t.me/ahmed_alnassif_tg)
-[![GitHub License](https://img.shields.io/github/license/ahmed-alnassif/GKID-Kernels?logo=gnu)](/LICENSE)
-[![SuSFS](https://img.shields.io/badge/SuSFS-4CAF50?&logo=gitlab&logoColor=white)](https://gitlab.com/simonpunk/susfs4ksu)
-[![KernelSU](https://img.shields.io/badge/KernelSU-000000?&logo=github&logoColor=white)](https://github.com/tiann/KernelSU)
-[![BakaSU](https://img.shields.io/badge/BakaSU-E91E63?&logo=github&logoColor=white)](https://github.com/Baka-SU/BakaSU)
-[![FinaSU](https://img.shields.io/badge/FinaSU-3F51B5?&logo=github&logoColor=white)](https://github.com/LyraVoid/FinaSU)
-[![Managers](https://img.shields.io/badge/Managers-multiple-success)](https://github.com/ahmed-alnassif/GKID-Kernels/releases)
+> [!NOTE]
+> **Based on [GKID Kernels](https://github.com/ahmed-alnassif/GKID-Kernels) by [Ahmed Al-Nassif](https://github.com/ahmed-alnassif).**
+> This project is a fork of GKID's `dev` branch at [`ef6c99d`](https://github.com/ahmed-alnassif/GKID-Kernels/commit/ef6c99dc6fc10f120cc02c37e721ab959a2fbd9c) (October 2026). Most of the build system, patches and configs come from GKID; [What's different from GKID](#whats-different-from-gkid) lists what changed here. GKID's own 6.1 kernel source is [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1). For the original project, its releases and its community, go to GKID.
 
-**⚡ Blazing fast GKI kernel for Android** with KernelSU, SuSFS, NetHunter, NTSync, performance optimizations, battery improvements, and advanced security features.
+## Will it work on my device?
 
----
+These are GKI kernels: one image for every device running a stock **android15-6.6** GKI kernel, with no device-specific source.
 
-> [!Important]
-> - This is a **GKI** kernel, not a custom kernel. It works on **ANY** device that ships with a matching GKI Linux version.
-> - Supported GKI versions: **5.10, 5.15, 6.1, 6.6, 6.12** (see [Supported GKI Kernel Versions](#-supported-gki-kernel-versions) below).
+Check Settings → About phone → Kernel version, or run `uname -r`. It should start with `6.6.` and contain `android15`, for example `6.6.57-android15-8-g…`. The installer stops if the running kernel isn't 6.6.
 
----
+> [!WARNING]
+> Back up your stock `boot.img` before flashing. If a build doesn't boot, flashing it back from recovery or fastboot is the way out.
 
-## ❤️ Support This Project
+## Variants
 
-**Tron (TRC20):** `TK7s2HGGWoLuefoznbVMZdiCpEwSTvZ1CV`
+Each release has one zip per variant:
 
-**Bitcoin (BTC):** `bc1qstka58vn66qutzhgaalxfm7jn4d7xmgkze26sk`
+| Variant | Root | Manager app | NoMount |
+|---|---|---|---|
+| **FinaSU+SuSFS** | [FinaSU](https://github.com/LyraVoid/FinaSU) | [FinaSU manager](https://github.com/LyraVoid/FinaSU/releases) | FinaSU's own driver, loaded by FinaSU |
+| **BakaSU+SuSFS** | [BakaSU](https://github.com/Baka-SU/BakaSU) | [BakaSU manager](https://github.com/Baka-SU/BakaSU) | Built in when the build's `NM` option is on |
 
-**Ethereum (ERC20):** `0xa13F8baaa24b563896a8ddAA3089317d43344C55`
+Both include SuSFS v2.4.0, Baseband Guard, NTSync, BBRv3 and the hardening and hiding changes below. Neither has KPM.
 
-**ShamCash:** `a7da9b01b8faf8e3b3839f1b9f2b8d04`
+Releases are published as pre-releases named `vYY.MM.DD-rN` on the [Releases](../../releases) page.
 
-Your donations keep this project alive! I spend countless hours maintaining kernel builds for 5 different versions, fixing bugs, adding features, and supporting users. **Every donation matters!** 🙏
+## Installing
 
----
+1. Download the zip for your variant from [Releases](../../releases).
+2. Flash it with one of:
+   - your root manager's **Install AnyKernel3** option (FinaSU and BakaSU both have it)
+   - a custom recovery (TWRP, OrangeFox, …)
+   - a kernel flasher app
+3. Reboot and install the manager app for that variant. The FinaSU kernel trusts only the official FinaSU manager.
 
-## ✨ ReSuSFS 
+### Switching between FinaSU and BakaSU
 
-**[ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS)** – Root hiding made simple, powerful when you need it. A [KernelSU](https://kernelsu.org) module and WebUI that turns SuSFS into clean config files and toggle switches for everyday use, with **strong hiding applied out of the box** via built-in spoofing and hiding scripts for one-tap protection, plus a script manager for power users who want more, all without leaving the WebUI.
+You can flash one variant over the other from the running manager. Afterwards:
 
----
+- **Manager:** install the new variant's manager. The old one won't control root any more.
+- **NoMount:** use one source.
+  - If [maxsteeel's NoMount](https://github.com/maxsteeel/nomount) module was installed while NoMount was built into your kernel, the module deleted its own driver during install. FinaSU steps aside for that module, so on a FinaSU kernel neither driver loads.
+  - Fix it by reinstalling the module, or by uninstalling it and choosing NoMount in FinaSU's mount settings.
+- **FinaSU's NoMount and hiding:** every app sees module files until you exclude it. Go to NoMount → **Excluded apps** → **Follow app profiles** → **Save** to hide them from non-root apps, as the default mount mode does. Repeat after installing apps or changing profiles.
+- **SuSFS settings:** [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS) works on both variants. FinaSU also has its own SuSFS page, which does nothing until you configure it. Use one or the other so they don't overwrite each other.
 
-## ⚡ Quick Start
+## Checking a flashed build
 
-1. **Check** your kernel version in Settings → About Phone
-2. **Download** matching variant from [Releases](https://github.com/ahmed-alnassif/GKID-Kernels/releases)
-3. **Flash** using KernelSU app or custom recovery
-4. **Manage** SuSFS with [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS)
-
----
+[`scripts/post-flash-check.sh`](scripts/post-flash-check.sh) runs on the phone as root. It reports PASS, FAIL or SKIP for each of these:
 
-## 📱 Supported GKI Kernel Versions
+- the running kernel is this build
+- vendor modules load without `Unknown symbol` errors
+- the wakelock cap
+- the unicode path fix
+- `/proc/config.gz` hiding
+- s2idle
+- SysV IPC on DroidSpaces and NetHunter builds
 
-| Linux | Android |
-|-------|---------|
-| 5.10  | 12      |
-| 5.15  | 13      |
-| 6.1   | 14      |
-| 6.6   | 15      |
-| 6.12  | 16      |
-
----
-
-## 🔧 Build Variants
-
-| Variant | Root | SuSFS | LTO | Compat |
-|---------|------|-------|-----|--------|
-| Vanilla | ❌ | ❌ | Full | ❌ |
-| Vanilla+NoLTO | ❌ | ❌ | ❌ | ❌ |
-| KernelSU | ✅ | ❌ | Full | ❌ |
-| KernelSU+SuSFS | ✅ | ✅ | Full | ❌ |
-| KSU+SuSFS+MM | ✅ | ✅ | Full | ❌ |
-| BakaSU+SuSFS | ✅ | ✅ | Full | ❌ |
-| FinaSU+SuSFS | ✅ | ✅ | Full | ❌ |
-| Compat+KSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
-| Compat+BakaSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
-| Compat+FinaSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
-
-**Optional features** (enable on any variant):
-- 🐳 DroidSpaces - Linux userspace support
-- 🐉 NetHunter - Wireless penetration testing
-- 🥷 NoMount - NoMount integration (not on FinaSU variants, which ship their own)
-
----
-
-## Performance
-
-| Feature | Description |
-|---------|-------------|
-| **300Hz Timer** | Reduced input latency for snappier UI response |
-| **MGLRU** | Multi-generational LRU for smoother multitasking |
-| **zRAM** | LZ4 compression with writeback for memory efficiency |
-| **CPU Governors** | schedutil + ondemand for smart power scaling |
-| **I/O Scheduler** | mq-deadline optimized for UFS 4.0 storage |
-| **F2FS Tuning** | 50ms GC sleep for buttery smooth I/O |
-| **AutoFDO** | Built with Google's in-tree sample profile on 6.6 and 6.12 for faster binder, syscalls and app launch |
-| **Memory Optimizations** | Prefetching in the arm64 copy routines and an aligned `clear_page()` |
-| **ext4 Tuning** | Extended commit age reducing unnecessary writes |
-| **NTSync Driver** | Faster Windows games/apps on Winlator/GameHub |
-
-**What this means for you:**
-- Apps launch faster
-- UI feels more responsive
-- Gaming has less stutter
-- Multitasking is smoother
-- Better framerates in games
-
----
-
-## 🔋 Battery Life
-
-| Feature | Description |
-|---------|-------------|
-| **Wakelock Cap** | 500ms cap prevents excessive battery drain |
-| **Freeze Timeout** | 20s → 1s for faster deadlock detection |
-| **F2FS Optimization** | Reduced GC overhead saves CPU cycles |
-| **Alarm Wakeups** | Minimized to reduce standby battery drain |
-| **ext4 Commit Age** | 30s commit age reduces write operations |
-| **Power Management** | Improved suspend/resume for better idle drain |
-
-**What this means for you:**
-- Better standby time
-- Less battery drain during use
-- Overnight battery lasts longer
-- Gaming doesn't kill battery as fast
-- All-day battery life
-
----
-
-## 🌐 Networking
-
-| Feature | Description |
-|---------|-------------|
-| **TCP BBRv3** | Default congestion control for maximum speed |
-| **Westwood+** | Alternative congestion control for WiFi |
-| **FQ CoDel** | Fair queuing with controlled delay |
-| **IP Set** | Efficient IP/network address management |
-| **IPv4/IPv6 NAT** | Full NAT support for tethering |
-| **IPsec/ESP** | VPN and secure tunneling support |
-| **Netfilter** | Advanced firewall and packet filtering |
-
-**What this means for you:**
-- Faster WiFi and mobile data
-- Better VPN performance
-- Improved tethering speeds
-- Lower gaming latency
-- Smoother streaming
-
----
-
-## 🛡️ Security
-
-| Feature | Description |
-|---------|-------------|
-| **SuSFS** | Advanced filesystem and process hiding |
-| **Baseband Guard** | Blocks unauthorized partition writes |
-| **Kernel LSM** | SELinux + Baseband Guard integration |
-| **Symbol Hiding** | Kernel symbol protection from detection |
-| **uname Spoofing** | System information hiding |
-| **Open Redirect** | Protected file operations |
-| **SUS MAP/PATH/MOUNT** | Complete filesystem hiding |
-| **Unicode Bypass Fix** | Zero-width tricks like `Android<U+200B>/data` no longer reach the real `Android/data` |
-| **Stock Kernel Name** | Optional `STOCK_NAME` build input reports a stock kernel identity instead of `-GKID-...`; paste your device's stock `Linux version ...` line into `STOCK_VERSION` for an exact match |
-| **Fake config.gz** | KSU, SuSFS, NoMount and BBG options reported as not set in `/proc/config.gz` |
-
-**What this means for you:**
-- Stronger root hiding
-- Better banking app compatibility
-- Improved security against detection
-- Safe from unauthorized system modifications
-
----
-
-## 🔑 Root Management
-
-| Feature | Description |
-|---------|-------------|
-| **KernelSU** | Stable kernel-based root with excellent hiding |
-| **BakaSU** | BakaSU kernel integration |
-| **FinaSU** | FinaSU with SuSFS inline hooks; needs the FinaSU manager, no KPM |
-| **Multiple Managers** | Run multiple KernelSU managers simultaneously |
-| **Vanilla** | No root for banking and corporate apps |
-
-**What this means for you:**
-- Reliable root access
-- Apps don't detect root
-- Pass SafetyNet/Play Integrity
-- Choose your root implementation
-
----
-
-## 🎮 NTSync
-
-Linux NTSYNC interface for Windows gaming:
-- Winlator
-- GameHub
-- ExaGear
-- Other Windows emulation
-
-**What this means for you:**
-- Better Windows game performance
-- Lower latency in emulators
-- GKI compatibility patches included
-
----
-
-## 🐳 DroidSpaces
-
-Complete Linux userspace support:
-- System V IPC and POSIX message queues
-- IPC and PID namespaces
-- devtmpfs with xattrs
-- POSIX ACLs
-- Netfilter and IP Set
-- UFW and Fail2ban requirements
-
-**What this means for you:**
-- Run Linux apps on Android
-- Better container support
-- Chroot and proot work better
-
----
-
-## 🐉 NetHunter
-
-Wireless penetration testing features:
-- cfg80211, mac80211, RFKILL
-- Realtek rtw88, R8188EU drivers
-- Atheros, MediaTek, Ralink, Zydas
-- Bluetooth HCI and USB networking
-- Monitor mode and packet injection
-
-**What this means for you:**
-- Kali NetHunter works perfectly
-- External WiFi adapters supported
-- Wireless auditing capabilities
-- Monitor mode for packet capture
-
----
-
-## 📦 WirelessKSU
-
-Separate KernelSU module containing wireless drivers and firmware when built as modules. Flash alongside the main kernel for full NetHunter support.
-
----
-
-## 🔥 LTO Options
-
-| Option | Description | Best For |
-|--------|-------------|----------|
-| **FullLTO** | Maximum performance, slower build | Gaming, performance |
-| **ThinLTO** | Faster build, good performance | Balanced |
-| **NoLTO** | Build compatibility | Problem devices |
-
----
-
-## 🔄 Compatibility
-
-**Use Compat if:**
-- You experience boot issues
-- Standard variants don't boot
-
----
-
-## 📥 Downloads
-
-**All releases:** [GitHub Releases](https://github.com/ahmed-alnassif/GKID-Kernels/releases)
-
-**Each release includes:**
-- 📦 AnyKernel3 flashable packages
-- 📦 WirelessKSU modules (when applicable)
-- 🔐 SHA256 and MD5 checksums
-- 📝 Build information and changelogs
-
----
-
-## 📡 TCP Congestion Control
-
-Switch congestion control algorithms (temporary, resets on reboot):
-
-```bash
-# Westwood+ - better for WiFi and mobile data
-su -c "sysctl -w net.ipv4.tcp_congestion_control=westwood"
-
-# BBRv3 - default, best for speed
-# 6.1 / 6.6: BBRv3 replaces "bbr"
-su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"
-# 5.10 / 5.15 / 6.12: BBRv3 is "bbr3" ("bbr" is still the original BBRv1)
-su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr3"
+```sh
+adb push scripts/post-flash-check.sh /data/local/tmp/
+adb shell sh /data/local/tmp/post-flash-check.sh
 ```
 
-**Make permanent:** Create a script in `/data/adb/service.d/` with the sysctl command or use ReSuSFS.
+Add `--suspend` to also check that the phone still suspends. The exit status is the number of failures.
 
----
+## What's different from GKID
 
-## Other Ways to Help
+**Root**
+- **FinaSU + SuSFS variant (new):**
+  - Uses SuSFS inline hooks and has preinit enabled.
+  - Trusts the FinaSU release manager through the kernel's second signature slot. The certificate is read from the latest FinaSU release APK at build time.
+  - The build stops if any of this is missing, instead of shipping a kernel the manager can't see.
+- **BakaSU SELinux types:** the types BakaSU injects (`ksu`, `ksu_file` and module types) are registered with SuSFS, so SELinux context probes such as Duck Detector's can't confirm them.
 
-- **Star the Repository** ⭐ - Helps others discover this project
-- **Share** 📢 - Spread the word in your community or forums
-- **Report Issues** 🐛 - Found a bug? Open an issue with detailed logs
-- **Contribute** 🔧 - Pull requests, suggestions, and feedback are always welcome
+**Kernel source and build**
+- **Source branch:** GKI 6.6 builds from `android15-6.6` instead of `android15-6.6-lts`. The patch level is the same, but Android security fixes land there first.
+- **AutoFDO:** uses the sample profile Google ships in the GKI tree (6.6 and 6.12).
+- **KMI check:** symbol CRCs are checked after each build. By default this only warns.
+- **Stock-style kernel name (optional, `STOCK_NAME`):**
+  - Reports an `-android15-8-g…` release instead of the project name.
+  - Can copy a stock kernel's builder, compiler and build date.
+  - Always keeps the real 6.6 patch level, because faking it stops vendor modules from loading and bootloops the phone.
+- **CI:** builds GKI 6.6 only (BakaSU and FinaSU). Telegram posting is removed.
 
----
+**Security and hiding**
+- **Hardening (KMI-safe):** heap memory is zeroed on free, the kernel stack offset is randomized on every syscall, and call-used registers are zeroed on return.
+- **`/proc/config.gz`:** reports root-related options as not set (KernelSU, SuSFS, KPM, NoMount, Baseband Guard).
+- **Unicode path fix:** paths containing zero-width characters (for example `Android/data` with a U+200B inside) no longer resolve to the real folder. This closes a known `Android/data` access bypass.
 
-## 💬 Community
+**Fixes**
+- **Wakelock cap:** the 500 ms cap that GKID's README advertised is now applied. Userspace wakelocks without a timeout expire after 500 ms.
+- **BBRv3:** now on every GKI line. New backports for 5.10, 5.15 and 6.12, and a rebased patch for 6.6.
+- **SIMD `memcmp` removed on 6.1, 6.6 and 6.12:** it could corrupt a user thread's FP/SIMD registers.
+- **Dropped patches:** `int_sqrt` (slower and wrong for very large inputs) and `lib/string` (unused on arm64).
+- **Patch rebases:** patches are rebased per GKI line and checked against current AOSP.
+- **Post-flash check:** added the on-device check script.
 
-- **Telegram:** [@ahmed_alnassif_tg](https://t.me/ahmed_alnassif_tg)
-- **Discussions:** [GitHub Discussions](https://github.com/ahmed-alnassif/GKID-Kernels/discussions)
-- **Issues:** [GitHub Issues](https://github.com/ahmed-alnassif/GKID-Kernels/issues)
+## What's inside
 
----
+**Performance**
+- 300 Hz timer
+- MGLRU forced on
+- zRAM with LZ4 and writeback
+- schedutil and ondemand governors
+- mq-deadline I/O scheduler
+- Optimized arm64 memory routines
+- Scheduler tweaks: CPU scan order, `CACHE_HOT_BUDDY` off
+- NTSync driver for Windows games and apps in Winlator and GameHub
 
-## 📄 License
+**Storage**
+- F2FS: 50 ms urgent GC sleep, shorter uncongestion timeout, larger `min_fsync_blocks`
+- ext4: longer default commit age, so fewer writes
 
-See [LICENSE](LICENSE).
+**Battery**
+- 500 ms wakelock cap
+- 1 s freezer timeout
+- Minimized alarm wakeups
+- s2idle wake-attempt gate
+- Less log spam
+
+**Networking**
+- BBRv3 as the default congestion control, plus Westwood+
+- FQ-CoDel and FQ
+- IP sets
+- IPv4 and IPv6 NAT
+- IPsec
+- Extra netfilter targets and matches for firewalls and tethering
+
+**Security**
+- SuSFS v2.4.0: hides paths, mounts, kstat, memory maps and KernelSU/SuSFS symbols; spoofs uname and cmdline/bootconfig; supports open redirect
+- Baseband Guard: blocks unauthorized writes to critical partitions
+- The hardening above
+
+**Build options**
+- **DroidSpaces:** Linux containers (SysV IPC, namespaces, devtmpfs, netfilter for UFW and Fail2ban)
+- **NetHunter:** monitor mode and packet injection, Realtek rtw88 and other USB Wi-Fi drivers, Bluetooth HCI, SDR. Wireless drivers built as modules ship as a separate `WirelessKSU` module zip.
+- **NoMount:** built into BakaSU kernels when `NM` is on
+
+### Switching TCP congestion control
+
+The change lasts until reboot:
+
+```sh
+su -c "sysctl -w net.ipv4.tcp_congestion_control=westwood"   # Westwood+, can do better on Wi-Fi and mobile data
+su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"        # BBRv3, the default
+```
+
+To make it permanent, put the command in a script in `/data/adb/service.d/`.
+
+## Building
+
+Builds run on GitHub Actions. Open the Actions tab, select the build workflow ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a pre-release.
+
+| Input | Default | What it does |
+|---|---|---|
+| `TODO` | `kernel` | `kernel` builds and releases; `defconfig` only exports the generated config |
+| `TEST` | `no` | `yes` runs the pipeline without compiling |
+| `LTO` | `fullLTO` | `fullLTO`, `thinLTO` or `noneLTO` |
+| `CLEAN_LTO_CACHE` | on | Clears the ThinLTO cache first |
+| `DROIDSPACES` | on | DroidSpaces support |
+| `NH` | on | NetHunter drivers and patches |
+| `NM` | off | Builds NoMount into BakaSU kernels (FinaSU always uses its own) |
+| `AUTOFDO` | on | Uses the in-tree AutoFDO profile |
+| `HARDENING` | on | KMI-safe hardening |
+| `STOCK_NAME` | off | Reports a stock GKI-style kernel release |
+| `STOCK_VERSION` | empty | With `STOCK_NAME`: a stock `Linux version …` line, or just a release suffix, to copy from |
+
+`build.sh` also reads these environment variables:
+
+| Variable | What it does |
+|---|---|
+| `FINASU_REF` | FinaSU branch or tag to build (default `dev`) |
+| `FINASU_CERT_SIZE`, `FINASU_CERT_HASH` | Manager certificate to trust; skips the APK download |
+| `KMI_STRICT=true` | Fails the build on KMI CRC mismatches |
+
+`build.sh` still supports 5.10, 5.15, 6.1 and 6.12, plus the Vanilla, KernelSU, Compat and NoDS variants. To build those, change `KERNEL_VERSION` and `VARIANTS` in the workflow's matrix step. CI only builds 6.6, so other lines may need fixes.
+
+## Credits
+
+- [GKID Kernels](https://github.com/ahmed-alnassif/GKID-Kernels) by [Ahmed Al-Nassif](https://github.com/ahmed-alnassif): the original project this is based on, plus [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1), [AK3-GKID](https://github.com/ahmed-alnassif/AK3-GKID) and [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS). You can [support his work here](https://github.com/ahmed-alnassif/GKID-Kernels#-support-this-project).
+- [SuSFS](https://gitlab.com/simonpunk/susfs4ksu) by simonpunk
+- [FinaSU](https://github.com/LyraVoid/FinaSU) by LyraVoid
+- [BakaSU](https://github.com/Baka-SU/BakaSU)
+- [KernelSU](https://github.com/tiann/KernelSU) by tiann
+- [NoMount](https://github.com/maxsteeel/nomount) by maxsteeel
+- [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard)
+- [WildKernels kernel patches](https://github.com/WildKernels/kernel_patches): NTSync and the hiding patch review
+- fake `config.gz` patch by fatalcoder524; wakelock timeout patch by Panchajanya1999
+- BBRv3 by Google's BBR team
+- [GKI_FinaSU](https://github.com/muling0721/GKI_FinaSU) by muling0721: the FinaSU manager certificate extractor
+- [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by osm0sis
+- [Neutron Clang](https://github.com/Neutron-Toolchains)
+- DroidSpaces kernel config by [ravindu644](https://github.com/ravindu644)
+
+## License
+
+GPL-3.0, the same as GKID. See [LICENSE](LICENSE).
