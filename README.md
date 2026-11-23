@@ -1,6 +1,6 @@
 # [Project name]
 
-GKI kernels for Android devices on Linux 6.6 (`android15-6.6`), with FinaSU or BakaSU root, SuSFS hiding, KMI-safe hardening and performance tuning.
+GKI kernels for Android devices on Linux 5.10, 5.15, 6.1, 6.6 and 6.12, with FinaSU or BakaSU root, SuSFS hiding, KMI-safe hardening and performance tuning.
 
 > [!NOTE]
 > **Based on [GKID Kernels](https://github.com/ahmed-alnassif/GKID-Kernels) by [Ahmed Al-Nassif](https://github.com/ahmed-alnassif).**
@@ -8,16 +8,29 @@ GKI kernels for Android devices on Linux 6.6 (`android15-6.6`), with FinaSU or B
 
 ## Will it work on my device?
 
-These are GKI kernels: one image for every device running a stock **android15-6.6** GKI kernel, with no device-specific source.
+These are GKI kernels: one image per kernel line, for every device whose stock kernel is a GKI kernel on that line. No device-specific source is needed.
 
-Check Settings → About phone → Kernel version, or run `uname -r`. It should start with `6.6.` and contain `android15`, for example `6.6.57-android15-8-g…`. The installer stops if the running kernel isn't 6.6.
+| Linux | Android | GKI KMI | `uname -r` contains |
+|---|---|---|---|
+| 5.10 | 12 | `android12-5.10` | `5.10.` and `android12` |
+| 5.15 | 13 | `android13-5.15` | `5.15.` and `android13` |
+| 6.1 | 14 | `android14-6.1` | `6.1.` and `android14` |
+| 6.6 | 15 | `android15-6.6` | `6.6.` and `android15` |
+| 6.12 | 16 | `android16-6.12` | `6.12.` and `android16` |
+
+Check Settings → About phone → Kernel version, or run `uname -r`, and download the zip for the matching line. The Android number in the kernel version is the release the kernel was built for, which can be older than the Android version your phone runs now. The installer stops if the running kernel isn't on the zip's Linux version.
+
+> [!IMPORTANT]
+> Only the KMIs in the table are built. Devices on `android13-5.10` or `android14-5.15` have the same Linux version but a different KMI. The installer won't stop you, but vendor modules may not load.
+
+The 6.1 builds use GKID's [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1) tree. The other lines build from AOSP's GKI branches.
 
 > [!WARNING]
 > Back up your stock `boot.img` before flashing. If a build doesn't boot, flashing it back from recovery or fastboot is the way out.
 
 ## Variants
 
-Each release has one zip per variant:
+Each release has one zip per variant for each kernel line:
 
 | Variant | Root | Manager app | NoMount |
 |---|---|---|---|
@@ -30,7 +43,7 @@ Releases are published as pre-releases named `vYY.MM.DD-rN` on the [Releases](..
 
 ## Installing
 
-1. Download the zip for your variant from [Releases](../../releases).
+1. Download the zip for your kernel line and variant from [Releases](../../releases).
 2. Flash it with one of:
    - your root manager's **Install AnyKernel3** option (FinaSU and BakaSU both have it)
    - a custom recovery (TWRP, OrangeFox, …)
@@ -81,10 +94,10 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **AutoFDO:** uses the sample profile Google ships in the GKI tree (6.6 and 6.12).
 - **KMI check:** symbol CRCs are checked after each build. By default this only warns.
 - **Stock-style kernel name (optional, `STOCK_NAME`):**
-  - Reports an `-android15-8-g…` release instead of the project name.
+  - Reports a stock-style release (for example `-android15-8-g…`) instead of the project name.
   - Can copy a stock kernel's builder, compiler and build date.
-  - Always keeps the real 6.6 patch level, because faking it stops vendor modules from loading and bootloops the phone.
-- **CI:** builds GKI 6.6 only (BakaSU and FinaSU). Telegram posting is removed.
+  - Always keeps the real patch level, because faking it stops vendor modules from loading and bootloops the phone.
+- **CI:** builds the BakaSU and FinaSU variants for the kernel line you pick, or all lines. Telegram posting is removed.
 
 **Security and hiding**
 - **Hardening (KMI-safe):** heap memory is zeroed on free, the kernel stack offset is randomized on every syscall, and call-used registers are zeroed on return.
@@ -160,6 +173,7 @@ Builds run on GitHub Actions. Open the Actions tab, select the build workflow ([
 | `TODO` | `kernel` | `kernel` builds and releases; `defconfig` only exports the generated config |
 | `TEST` | `no` | `yes` runs the pipeline without compiling |
 | `LTO` | `fullLTO` | `fullLTO`, `thinLTO` or `noneLTO` |
+| `KERNEL_VERSION` | `All` | Kernel line to build: `All`, `5.10`, `5.15`, `6.1`, `6.6` or `6.12` |
 | `CLEAN_LTO_CACHE` | on | Clears the ThinLTO cache first |
 | `DROIDSPACES` | on | DroidSpaces support |
 | `NH` | on | NetHunter drivers and patches |
@@ -177,7 +191,7 @@ Builds run on GitHub Actions. Open the Actions tab, select the build workflow ([
 | `FINASU_CERT_SIZE`, `FINASU_CERT_HASH` | Manager certificate to trust; skips the APK download |
 | `KMI_STRICT=true` | Fails the build on KMI CRC mismatches |
 
-`build.sh` still supports 5.10, 5.15, 6.1 and 6.12, plus the Vanilla, KernelSU, Compat and NoDS variants. To build those, change `KERNEL_VERSION` and `VARIANTS` in the workflow's matrix step. CI only builds 6.6, so other lines may need fixes.
+`build.sh` also supports the Vanilla, KernelSU, Compat and NoDS variants. To build those, add their names to `VARIANTS` and turn on the matching `BUILD_*` flag in the workflow's matrix step.
 
 ## Credits
 

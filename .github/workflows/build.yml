@@ -31,6 +31,18 @@ on:
           - "thinLTO"
           - "fullLTO"
 
+      KERNEL_VERSION:
+        description: "GKI kernel line to build"
+        default: "All"
+        type: choice
+        options:
+          - "All"
+          - "5.10"
+          - "5.15"
+          - "6.1"
+          - "6.6"
+          - "6.12"
+
       CLEAN_LTO_CACHE:
         description: "Clean ThinLTO cache to fix .config bug"
         type: boolean
@@ -112,8 +124,8 @@ jobs:
       - name: Generate build matrix
         id: set-matrix
         env:
-          # CI builds only GKI 6.6 with BakaSU + SUSFS and FinaSU + SUSFS.
-          KERNEL_VERSION: "6.6"
+          # CI builds BakaSU + SUSFS and FinaSU + SUSFS for the selected GKI line(s).
+          KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
           BUILD_VANILLA: "false"
           BUILD_KSU: "false"
           BUILD_KSU_SUSFS: "true"
