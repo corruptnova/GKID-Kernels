@@ -11,6 +11,7 @@ declare -A ANDROID_RELEASE_FOR_KVER=(
 declare -A GKI_BRANCH=(
   ["5.10"]="android12-5.10"
   ["5.15"]="android13-5.15"
+  ["6.1"]="android14-6.1"
   ["6.6"]="android15-6.6"
   ["6.12"]="android16-6.12"
 )
@@ -18,6 +19,7 @@ declare -A GKI_BRANCH=(
 declare -A GKI_AOSP_BRANCH=(
   ["5.10"]="android12-5.10-lts"
   ["5.15"]="android13-5.15-lts"
+  ["6.1"]="android14-6.1"  # main branch: the one Google builds GKI releases from; gets Android security fixes first
   ["6.6"]="android15-6.6"  # main branch: same 6.6.144 LTS level as -lts, but gets Android security fixes first
   ["6.12"]="android16-6.12-lts"
 )

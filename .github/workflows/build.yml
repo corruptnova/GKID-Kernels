@@ -168,7 +168,6 @@ jobs:
       - name: Run Build Script
         env:
           GH_TOKEN: ${{ github.token }}
-          KERNEL_REPO: https://github.com/ahmed-alnassif/GKI-Duchamp-6.1
           KERNEL_VERSION: ${{ matrix.kernel_version }}
           KSU: ${{ matrix.KSU }}
           KSU_COMPAT: ${{ matrix.KSU_COMPAT }}
