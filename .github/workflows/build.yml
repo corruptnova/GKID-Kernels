@@ -74,7 +74,7 @@ on:
         default: true
 
       STOCK_NAME:
-        description: "Report a stock GKI style kernel release instead of -GKID-..."
+        description: "Report a stock GKI style kernel release instead of the project name (-GKID-rN-...)"
         type: boolean
         default: false
 
@@ -334,10 +334,13 @@ jobs:
       - name: Load environment from builds and prepare release body
         env:
           TEST_INPUT: ${{ inputs.TEST }}
-          DROIDSPACES_INPUT: ${{ inputs.DroidSpaces }}
+          DROIDSPACES_INPUT: ${{ inputs.DROIDSPACES }}
           NH_INPUT: ${{ inputs.NH }}
           NM_INPUT: ${{ inputs.NM }}
           LTO_INPUT: ${{ inputs.LTO }}
+          AUTOFDO_INPUT: ${{ inputs.AUTOFDO }}
+          HARDENING_INPUT: ${{ inputs.HARDENING }}
+          STOCK_NAME_INPUT: ${{ inputs.STOCK_NAME }}
         run: python3 .github/scripts/prepare_release.py
 
       - name: Upload All Builds to release repo
