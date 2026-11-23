@@ -77,6 +77,77 @@ def display_variant_name(build):
 	return name[len(prefix):] if name.startswith(prefix) else name
 
 
+ROOT_NAMES = {
+	"FSU": "FinaSU",
+	"BSU": "BakaSU",
+	"KSU": "KernelSU",
+	"SKSU": "SukiSU-Ultra",
+}
+
+LTO_NAMES = {"fullLTO": "Full", "thinLTO": "Thin", "noneLTO": "None"}
+
+
+def variant_name(build):
+	"""The user-facing variant build.sh put in the zip name, e.g. Compat+NoLTO+FinaSU+SuSFS."""
+	if build.get("VARIANT"):
+		return build["VARIANT"]
+	base_name = build.get("BASE_NAME", "")
+	if "-" in base_name:
+		return base_name.split("-", 1)[1]
+	return display_variant_name(build)
+
+
+def variant_traits(build, inputs):
+	"""Root, SuSFS, LTO, Compat and DroidSpaces/NetHunter for one build."""
+	name = variant_name(build)
+	compat = build.get("KSU_COMPAT") == "true" or name.startswith("Compat+")
+	# build.sh turns DroidSpaces/NetHunter off for NoDS and Vanilla builds
+	no_ds = build.get("No_DS") == "true" or "NoDS" in name or build.get("KSU") in ("no", "vnlto")
+	if "NoLTO" in name:
+		lto = "None"
+	else:
+		lto = LTO_NAMES.get(inputs["lto"], inputs["lto"] or "Unknown")
+	return {
+		"root": ROOT_NAMES.get(build.get("KSU", ""), "None"),
+		"susfs": build.get("KSU_SUSFS") == "true",
+		"lto": lto,
+		"compat": compat,
+		"ds_nh": not no_ds and "true" in (inputs["droidspaces"], inputs["nh"]),
+	}
+
+
+def variant_summary(traits):
+	parts = [f"{traits['root']} root" if traits["root"] != "None" else "no root"]
+	if traits["susfs"]:
+		parts.append("SuSFS")
+	parts.append("no LTO" if traits["lto"] == "None" else f"{traits['lto']} LTO")
+	if traits["compat"]:
+		parts.append("Compat build")
+	if not traits["ds_nh"]:
+		parts.append("no DroidSpaces/NetHunter")
+	return ", ".join(parts)
+
+
+def variant_table(all_builds, inputs):
+	"""Markdown table of the variants actually in this release, plus whether any is Compat/FinaSU."""
+	yes_no = lambda v: "✅" if v else "❌"
+	rows = {}
+	for b in all_builds:
+		rows.setdefault(variant_name(b), variant_traits(b, inputs))
+	lines = [
+		"| Variant | Root | SuSFS | LTO | Compat | DroidSpaces / NetHunter |",
+		"|---------|------|-------|-----|--------|-------------------------|",
+	]
+	for name in sorted(rows, key=lambda n: (n.startswith("Compat"), n)):
+		t = rows[name]
+		root = t["root"] if t["root"] != "None" else "❌"
+		lto = t["lto"] if t["lto"] != "None" else "❌"
+		lines.append(f"| {name} | {root} | {yes_no(t['susfs'])} | {lto} | {yes_no(t['compat'])} | {yes_no(t['ds_nh'])} |")
+	has_compat = any(t["compat"] for t in rows.values())
+	has_finasu = any(t["root"] == "FinaSU" for t in rows.values())
+	return "\n".join(lines), has_compat, has_finasu
+
+
 def build_kernel_section(kernel_version, builds, repo, tag, existing_zips, inputs):
 	android_release = builds[0].get("ANDROID_RELEASE", "unknown")
 	label = f"Android{android_release}-{kernel_version}-LTS"
@@ -85,10 +156,11 @@ def build_kernel_section(kernel_version, builds, repo, tag, existing_zips, input
 	representative = next((b for b in builds if b.get("KSU_SUSFS") == "true"), builds[0])
 
 	file_lines = []
-	for b in sorted(builds, key=lambda b: display_variant_name(b)):
+	for b in sorted(builds, key=lambda b: (variant_name(b).startswith("Compat"), variant_name(b))):
 		zip_name = variant_zip_name(b)
 		if zip_name and zip_name in existing_zips:
-			file_lines.append(variant_link(display_variant_name(b), zip_name, repo, tag))
+			link = variant_link(variant_name(b), zip_name, repo, tag)
+			file_lines.append(f"{link}: {variant_summary(variant_traits(b, inputs))}")
 	files_block = "\n".join(file_lines) if file_lines else "- *No build artifacts found*"
 
 	wireless_prefix = f"WirelessKSU-{kernel_version}-"
@@ -161,6 +233,20 @@ def build_release_body():
 		toc_entries.append(f"- [{label}](#{slugify(label)})")
 		sections.append(section)
 
+	table_block, has_compat, has_finasu = variant_table(all_builds, inputs)
+	finasu_note = (
+		"**FinaSU builds** need the [FinaSU manager](https://github.com/LyraVoid/FinaSU/releases), "
+		"have no KPM, and use FinaSU's own NoMount instead of the built-in one.\n\n"
+		if has_finasu
+		else ""
+	)
+	if has_compat:
+		pick_advice = "**Not sure? Use a `Compat` variant first**: it fixes most boot issues."
+		bootloop_advice = "Flash a **Compat** variant first."
+	else:
+		pick_advice = "**Pick the variant for the root manager you use**: each one needs its own manager app."
+		bootloop_advice = "Flash your stock `boot.img` back from recovery or fastboot."
+
 	toc_block = "\n".join(toc_entries)
 	sections_block = "\n\n---\n\n".join(sections)
 
@@ -187,22 +273,9 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 
 ## 🧭 Which variant should I flash?
 
-| Variant | Root | SuSFS | LTO | Compat |
-|---------|------|-------|-----|--------|
-| Vanilla | ❌ | ❌ | Full | ❌ |
-| Vanilla+NoLTO | ❌ | ❌ | ❌ | ❌ |
-| KernelSU | ✅ | ❌ | Full | ❌ |
-| KernelSU+SuSFS | ✅ | ✅ | Full | ❌ |
-| KSU+SuSFS+MM | ✅ | ✅ | Full | ❌ |
-| BakaSU+SuSFS | ✅ | ✅ | Full | ❌ |
-| FinaSU+SuSFS | ✅ | ✅ | Full | ❌ |
-| Compat+KSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
-| Compat+BakaSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
-| Compat+FinaSU+SuSFS | ✅ | ✅ | ❌ | ✅ |
+{table_block}
 
-**FinaSU builds** need the [FinaSU manager](https://github.com/LyraVoid/FinaSU/releases), have no KPM, and use FinaSU's own NoMount instead of the built-in one.
-
-**Not sure? Use a `Compat` variant first**: it fixes most boot issues. Full feature breakdown, LTO explanation, and troubleshooting live in the [README](https://github.com/ahmed-alnassif/GKID-Kernels#-build-variants).
+{finasu_note}{pick_advice} Full feature breakdown, LTO explanation, and troubleshooting live in the [README](https://github.com/{repo}#variants).
 
 ## Contents
 {toc_block}
@@ -214,15 +287,14 @@ Your donations keep this project alive! I spend countless hours maintaining kern
 ---
 
 >[!Note]
->- **Bootloop?** Flash a **Compat** variant first.
->- **Issues?** Check [Discussions](https://github.com/ahmed-alnassif/GKID-Kernels/discussions) before opening an issue.
+>- **Bootloop?** {bootloop_advice}
+>- **Issues?** Check existing [Issues](https://github.com/{repo}/issues) before opening a new one.
 
 ---
 
 ### Community & Support
-- **Have questions?** Start a [Discussion](https://github.com/ahmed-alnassif/GKID-Kernels/discussions)
-- **Found a bug?** Open an [Issue](https://github.com/ahmed-alnassif/GKID-Kernels/issues) with logs
-- **Enjoying the kernel?** Star the [repo](https://github.com/ahmed-alnassif/GKID-Kernels)
+- **Found a bug?** Open an [Issue](https://github.com/{repo}/issues) with logs
+- **Enjoying the kernel?** Star the [repo](https://github.com/{repo})
 
 ---
 

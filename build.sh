@@ -19,7 +19,8 @@ RELEASE="$(date +v%y.%m.%d)${RUN_NUM}"
 
 mkdir -p $RELEASE_DIR
 
-GKI_RELEASES_REPO="https://github.com/ahmed-alnassif/GKID-Kernels"
+# Releases are published to the repo the workflow runs in
+GKI_RELEASES_REPO="https://github.com/${GITHUB_REPOSITORY:-corruptnova/GKID-Kernels}"
 AK3_ZIP_NAME="$KERNEL_NAME-VARIANT-REL-KVER.zip"
 OUTDIR="$WORKDIR/out"
 KSRC="$WORKDIR/ksrc"

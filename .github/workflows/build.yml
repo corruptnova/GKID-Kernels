@@ -251,6 +251,9 @@ jobs:
           BASE_NAME=${{ env.BASE_NAME }}
           KSU=${{ matrix.KSU }}
           KSU_SUSFS=${{ matrix.KSU_SUSFS }}
+          KSU_COMPAT=${{ matrix.KSU_COMPAT }}
+          No_DS=${{ matrix.No_DS }}
+          VARIANT=${{ env.VARIANT }}
           KERNEL_VERSION=${{ env.KERNEL_VERSION }}
           ANDROID_RELEASE=${{ env.ANDROID_RELEASE }}
           KERNEL_SOURCE_REPO=${{ env.KERNEL_SOURCE_REPO }}
