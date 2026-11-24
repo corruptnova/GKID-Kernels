@@ -628,6 +628,32 @@ keep_gki_ll_max_header() {
     success "LL_MAX_HEADER kept at GKI's value with mesh enabled"
 }
 
+# Zero heap memory on free by default without CONFIG_INIT_ON_FREE_DEFAULT_ON.
+# That option declares the exported init_on_free static key as
+# static_key_true instead of GKI's static_key_false, which changes its KMI
+# CRC, and a stock-built module calling want_init_on_free() reads it as off.
+# The kernel turns the key on or off at boot from _init_on_free_enabled_early,
+# which defaults to that option; default it to true instead. Same behavior
+# (init_on_free=0 still turns it off) with GKI's symbol.
+default_init_on_free_on() {
+    local decl='^static bool _init_on_free_enabled_early __read_mostly$'
+    local file
+
+    for file in mm/mm_init.c mm/page_alloc.c; do
+        [[ -f "$file" ]] && grep -q "$decl" "$file" || continue
+        if ! grep -q "NovaGKI: init_on_free on by default" "$file"; then
+            # The initializer is on the line after the declaration
+            sed -i "/$decl/{n;s|= IS_ENABLED(CONFIG_INIT_ON_FREE_DEFAULT_ON);|= true; /* NovaGKI: init_on_free on by default, GKI's KMI */|}" "$file"
+        fi
+        if grep -q "NovaGKI: init_on_free on by default" "$file"; then
+            success "init_on_free on by default ($file)"
+            return 0
+        fi
+    done
+
+    warning "init_on_free default not found - init_on_free stays off by default"
+}
+
 fix_task_mmu_corruption() {
     local file="fs/proc/task_mmu.c"
     local patch="$KERNEL_PATCHES/susfs/0001-fix-sync-task_mmu.c-SuSFS-patch-with-upstream.patch"
