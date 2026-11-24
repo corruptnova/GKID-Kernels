@@ -641,6 +641,9 @@ cleanup_abi_gki_protected_exports() {
 
     for path in "android" "."; do
         if [[ -d "$path" ]] && compgen -G "$path/*protected_exports*" > /dev/null; then
+            # The KMI check still needs to know which symbols those modules export
+            mkdir -p "$KMI_REF_DIR"
+            cp "$path"/*protected_exports* "$KMI_REF_DIR/"
             rm -rf "$path"/*protected_exports*
             files_found=1
         fi

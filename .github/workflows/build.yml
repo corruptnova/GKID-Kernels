@@ -154,7 +154,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libdw-dev ccache gh bc bison flex libssl-dev libelf-dev dwarves cpio
-          pip install lxml rich
 
       - name: Restore ccache from release
         if: github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig'
@@ -305,9 +304,10 @@ jobs:
         with:
           name: all-builds-${{ github.run_number }}
           retention-days: 7
+          # merge-multiple extracts every build's files to the top of downloaded-artifacts/
           path: |
-            downloaded-artifacts/artifacts/*.txt
-            downloaded-artifacts/artifacts/*.zip
+            downloaded-artifacts/*.txt
+            downloaded-artifacts/*.zip
 
   release:
     needs: build
@@ -348,6 +348,8 @@ jobs:
         with:
           name: ${{ env.RELEASE_NAME }}
           tag_name: ${{ env.RELEASE }}
+          # Tag the commit that was built, not the default branch's latest
+          target_commitish: ${{ github.sha }}
           prerelease: true
           files: |
             release-artifacts/*.zip
