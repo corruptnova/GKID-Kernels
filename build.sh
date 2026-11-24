@@ -144,6 +144,7 @@ apply_kernel_patches
 apply_force_load_module_patch
 apply_s2idle_wake_gate
 apply_extract_cert_key_pass_patch
+keep_gki_ll_max_header
 cleanup_abi_gki_protected_exports
 
 

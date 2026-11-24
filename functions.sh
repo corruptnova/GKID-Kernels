@@ -603,6 +603,31 @@ apply_extract_cert_key_pass_patch() {
     success "extract-cert key_pass patch applied via sed"
 }
 
+# nethunter.config turns on CONFIG_MAC80211_MESH (802.11s mesh for USB Wi-Fi
+# adapters), which raises LL_MAX_HEADER from 96 to 128. That sizes the header
+# cache in every neighbour entry (struct hh_cache), so it changes the layout of
+# struct neighbour and the symbol CRCs (KMI) of most networking, device, crypto
+# and perf exports. mac80211 asks for its mesh headroom through
+# dev->needed_headroom and grows a short buffer itself, so keep stock GKI's 96
+# and leave mesh support on.
+keep_gki_ll_max_header() {
+    local file="include/linux/netdevice.h"
+    local mesh_check='^# if defined(CONFIG_MAC80211_MESH)$'
+
+    if grep -q "NovaGKI: GKI's LL_MAX_HEADER" "$file"; then
+        success "LL_MAX_HEADER already kept at GKI's value"
+        return 0
+    fi
+
+    if ! grep -q "$mesh_check" "$file"; then
+        warning "MAC80211_MESH check for LL_MAX_HEADER not found in $file - skipping"
+        return 0
+    fi
+
+    sed -i "s|$mesh_check|# if 0 /* NovaGKI: GKI's LL_MAX_HEADER even with CONFIG_MAC80211_MESH */|" "$file"
+    success "LL_MAX_HEADER kept at GKI's value with mesh enabled"
+}
+
 fix_task_mmu_corruption() {
     local file="fs/proc/task_mmu.c"
     local patch="$KERNEL_PATCHES/susfs/0001-fix-sync-task_mmu.c-SuSFS-patch-with-upstream.patch"
