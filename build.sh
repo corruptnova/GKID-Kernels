@@ -588,6 +588,7 @@ KMI_REPORT="$RELEASE_DIR/kmi-report-${KERNEL_VERSION}-${VARIANT}.txt"
 KMI_SUMMARY="$WORKDIR/kmi-summary.txt"
 echo "::group::[*] KMI symbol CRC check"
 python3 "$KMI_CHECK" --ksrc "$KSRC" --symvers "$OUTDIR/vmlinux.symvers" \
+  --module-symvers "$OUTDIR/Module.symvers" \
   --protected-exports "$KMI_REF_DIR/abi_gki_protected_exports_aarch64" \
   --report "$KMI_REPORT" --summary-file "$KMI_SUMMARY"
 KMI_RC=$?
