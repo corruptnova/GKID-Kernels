@@ -399,10 +399,10 @@ index 9792e82..36f31e9 100644
  	/* Clean up fastopen related fields */
 diff --git a/net/ipv4/tcp_bbr3.c b/net/ipv4/tcp_bbr3.c
 new file mode 100644
-index 0000000..23da415
+index 0000000..3703f83
 --- /dev/null
 +++ b/net/ipv4/tcp_bbr3.c
-@@ -0,0 +1,2360 @@
+@@ -0,0 +1,2364 @@
 +/* BBR (Bottleneck Bandwidth and RTT) congestion control
 + *
 + * BBR is a model-based congestion control algorithm that aims for low queues,
@@ -875,6 +875,10 @@ index 0000000..23da415
 +{
 +	struct tcp_sock *tp = tcp_sk(sk);
 +	struct bbr3 *bbr = bbr3_get_priv(sk);
++
++	/* Not set up yet (e.g. a Fast Open SYN with data) or its allocation failed */
++	if (!bbr || !bbr->initialized)
++		return;
 +
 +	if (event == CA_EVENT_TX_START) {
 +		if (!tp->app_limited)
@@ -3014,7 +3018,7 @@ index d683ff9..77092d2 100644
  		goto rearm_timer;
  
 diff --git a/net/ipv4/tcp_rate.c b/net/ipv4/tcp_rate.c
-index a8f6d9d..3ad92f7 100644
+index a8f6d9d..9d3b723 100644
 --- a/net/ipv4/tcp_rate.c
 +++ b/net/ipv4/tcp_rate.c
 @@ -34,6 +34,24 @@
@@ -3081,6 +3085,18 @@ index a8f6d9d..3ad92f7 100644
  
  	rs->delivered_ce = tp->delivered_ce - rs->prior_delivered_ce;
  	/* delivered_ce occupies less than 32 bits in the skb control block */
+@@ -155,8 +178,9 @@ void tcp_rate_gen(struct sock *sk, u32 delivered, u32 lost,
+ 	 * longer phase.
+ 	 */
+ 	snd_us = rs->interval_us;				/* send phase */
+-	ack_us = tcp_stamp_us_delta(tp->tcp_mstamp,
+-				    rs->prior_mstamp); /* ack phase */
++	/* prior_mstamp comes from the 32-bit tx.delivered_mstamp */
++	ack_us = tcp_stamp32_us_delta(tp->tcp_mstamp,
++				      rs->prior_mstamp); /* ack phase */
+ 	rs->interval_us = max(snd_us, ack_us);
+ 
+ 	/* Record both segment send and ack receive intervals */
 -- 
 2.47.3
 

@@ -604,10 +604,10 @@ index c8db2f2..70b9cd0 100644
  	/* Clean up fastopen related fields */
 diff --git a/net/ipv4/tcp_bbr3.c b/net/ipv4/tcp_bbr3.c
 new file mode 100644
-index 0000000..b3868c5
+index 0000000..a8bdef3
 --- /dev/null
 +++ b/net/ipv4/tcp_bbr3.c
-@@ -0,0 +1,2364 @@
+@@ -0,0 +1,2368 @@
 +/* BBR (Bottleneck Bandwidth and RTT) congestion control
 + *
 + * BBR is a model-based congestion control algorithm that aims for low queues,
@@ -1080,6 +1080,10 @@ index 0000000..b3868c5
 +{
 +	struct tcp_sock *tp = tcp_sk(sk);
 +	struct bbr3 *bbr = bbr3_get_priv(sk);
++
++	/* Not set up yet (e.g. a Fast Open SYN with data) or its allocation failed */
++	if (!bbr || !bbr->initialized)
++		return;
 +
 +	if (event == CA_EVENT_TX_START) {
 +		if (!tp->app_limited)
@@ -3379,7 +3383,7 @@ index 0000000..18f4d3b
 +}
 +EXPORT_SYMBOL_GPL(tcp_plb_update_state_upon_rto);
 diff --git a/net/ipv4/tcp_rate.c b/net/ipv4/tcp_rate.c
-index 042e27f..d2a3b6f 100644
+index 042e27f..ae13708 100644
 --- a/net/ipv4/tcp_rate.c
 +++ b/net/ipv4/tcp_rate.c
 @@ -37,6 +37,25 @@
@@ -3452,3 +3456,15 @@ index 042e27f..d2a3b6f 100644
  
  	/* Model sending data and receiving ACKs as separate pipeline phases
  	 * for a window. Usually the ACK phase is longer, but with ACK
+@@ -149,8 +179,9 @@ void tcp_rate_gen(struct sock *sk, u32 delivered, u32 lost,
+ 	 * longer phase.
+ 	 */
+ 	snd_us = rs->interval_us;				/* send phase */
+-	ack_us = tcp_stamp_us_delta(tp->tcp_mstamp,
+-				    rs->prior_mstamp); /* ack phase */
++	/* prior_mstamp comes from the 32-bit tx.delivered_mstamp */
++	ack_us = tcp_stamp32_us_delta(tp->tcp_mstamp,
++				      rs->prior_mstamp); /* ack phase */
+ 	rs->interval_us = max(snd_us, ack_us);
+ 
+ 	/* Record both segment send and ack receive intervals */
