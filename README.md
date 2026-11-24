@@ -107,7 +107,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 
 **Fixes**
 - **Wakelock cap:** the 500 ms cap that GKID's README advertised is now applied. Userspace wakelocks without a timeout expire after 500 ms.
-- **BBRv3:** now on every GKI line. New backports for 5.10, 5.15 and 6.12, and a rebased patch for 6.6.
+- **BBRv3:** now on every GKI line, as a separate `bbr3` algorithm next to stock BBR. Every line uses a KMI-safe backport that keeps the TCP structures phone makers' modules use at their stock layout. 6.1 and 6.6 used Google's patch, which grew TCP's congestion-control area and moved every TCP socket field after it. The backports also fix delivery-rate samples breaking after about 71 minutes of uptime, a crash when a connection's BBRv3 state isn't set up yet, and (6.12) ECN marks left on ACKs and retransmits.
 - **SIMD `memcmp` removed on 6.1, 6.6 and 6.12:** it could corrupt a user thread's FP/SIMD registers.
 - **Dropped patches:** `int_sqrt` (slower and wrong for very large inputs) and `lib/string` (unused on arm64).
 - **Patch rebases:** patches are rebased per GKI line and checked against current AOSP.
@@ -161,7 +161,8 @@ The change lasts until reboot:
 
 ```sh
 su -c "sysctl -w net.ipv4.tcp_congestion_control=westwood"   # Westwood+, can do better on Wi-Fi and mobile data
-su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"        # BBRv3, the default
+su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr3"       # BBRv3, the default
+su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"        # stock BBR (v1)
 ```
 
 To make it permanent, put the command in a script in `/data/adb/service.d/`.
@@ -206,7 +207,7 @@ Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** (
 - [Baseband Guard](https://github.com/vc-teahouse/Baseband-guard)
 - [WildKernels kernel patches](https://github.com/WildKernels/kernel_patches): NTSync and the hiding patch review
 - fake `config.gz` patch by fatalcoder524; wakelock timeout patch by Panchajanya1999
-- BBRv3 by Google's BBR team
+- BBRv3 by Google's BBR team; KMI-safe backports based on fatalcoder524's
 - [GKI_FinaSU](https://github.com/muling0721/GKI_FinaSU) by muling0721: the FinaSU manager certificate extractor
 - [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by osm0sis
 - [Neutron Clang](https://github.com/Neutron-Toolchains)
