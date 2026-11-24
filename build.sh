@@ -29,6 +29,8 @@ OUTDIR="$WORKDIR/out"
 KSRC="$WORKDIR/ksrc"
 KERNEL_PATCHES="$WORKDIR/kernel-patches"
 PATCHES_DIR="$WORKDIR/patches"
+# Copies of GKI ABI files the build deletes but the KMI check still needs
+KMI_REF_DIR="$WORKDIR/kmi-ref"
 
 # FinaSU develops on dev; set FINASU_REF to a tag (e.g. v1.7.0) to pin it
 FINASU_REPO="LyraVoid/FinaSU"
@@ -417,7 +419,7 @@ fi
 
 KERNEL_IMAGE="$OUTDIR/arch/arm64/boot/Image"
 MODULE_SYMVERS="$OUTDIR/Module.symvers"
-KMI_CHECK="$WORKDIR/py/kmi-check-6.x.py"
+KMI_CHECK="$WORKDIR/py/kmi-check.py"
 
 echo "::group::[*] Generating config"
 make ${MAKE_ARGS[@]} "$KERNEL_DEFCONFIG"
@@ -579,22 +581,24 @@ echo "::endgroup::"
 set +eo pipefail
 
 # Vendor modules with mismatched symbol CRCs are force-loaded (see
-# 0003-kernel-module.c patch), so catch KMI breaks here instead of on-device.
-KMI_STG="$KSRC/android/abi_gki_aarch64.stg"
-if [ -f "$KMI_STG" ] && [ -f "$OUTDIR/vmlinux.symvers" ]; then
-  echo "::group::[*] KMI symbol CRC check"
-  python3 "$KMI_CHECK" "$KMI_STG" "$OUTDIR/vmlinux.symvers"
-  KMI_RC=$?
-  echo "::endgroup::"
-  if [ $KMI_RC -ne 0 ]; then
-    if [ "${KMI_STRICT:-false}" = "true" ]; then
-      error "KMI check failed (KMI_STRICT=true)"
-      exit 1
-    fi
-    echo "::warning::KMI check found symbol CRC mismatches; vendor modules may misbehave"
+# 0003-kernel-module.c patch), so report which symbols they use changed here
+# instead of finding out on a device. The full list goes into the artifacts.
+KMI_REPORT="$RELEASE_DIR/kmi-report-${KERNEL_VERSION}-${VARIANT}.txt"
+KMI_SUMMARY="$WORKDIR/kmi-summary.txt"
+echo "::group::[*] KMI symbol CRC check"
+python3 "$KMI_CHECK" --ksrc "$KSRC" --symvers "$OUTDIR/vmlinux.symvers" \
+  --protected-exports "$KMI_REF_DIR/abi_gki_protected_exports_aarch64" \
+  --report "$KMI_REPORT" --summary-file "$KMI_SUMMARY"
+KMI_RC=$?
+echo "::endgroup::"
+if [ $KMI_RC -eq 1 ]; then
+  if [ "${KMI_STRICT:-false}" = "true" ]; then
+    error "KMI check failed (KMI_STRICT=true): $(cat "$KMI_SUMMARY")"
+    exit 1
   fi
-else
-  warning "KMI check skipped: abi_gki_aarch64.stg or vmlinux.symvers not found"
+  echo "::warning::KMI ${KERNEL_VERSION} ${VARIANT}: $(cat "$KMI_SUMMARY"). Details: $(basename "$KMI_REPORT") in the build artifacts"
+elif [ $KMI_RC -ne 0 ]; then
+  warning "KMI check could not run (see the log above)"
 fi
 
 cd $WORKDIR
