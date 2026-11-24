@@ -628,6 +628,35 @@ keep_gki_ll_max_header() {
     success "LL_MAX_HEADER kept at GKI's value with mesh enabled"
 }
 
+# CONFIG_CC_HAS_COUNTED_BY needs clang 19.1.3+, so it is off in Google's GKI
+# builds (clang 18) and on with this build's newer clang. Then __counted_by()
+# expands to an attribute that genksyms includes in type signatures, which
+# changes the CRCs of every export whose types reach an annotated struct (on
+# 6.6: icc_set_bw, icc_put, of_icc_get and the other struct icc_path users).
+# The attribute doesn't change layout, so hide it from genksyms only: the CRCs
+# match GKI's and the compiler keeps the bounds checks. 6.12 computes CRCs from
+# DWARF (gendwarfksyms), where this has no effect; 5.10-6.1 have no such macro.
+hide_counted_by_from_genksyms() {
+    local file="include/linux/compiler_types.h"
+
+    if grep -q "NovaGKI: __counted_by hidden from genksyms" "$file" 2>/dev/null; then
+        success "__counted_by already hidden from genksyms"
+        return 0
+    fi
+
+    if ! grep -A1 '^#ifdef CONFIG_CC_HAS_COUNTED_BY$' "$file" 2>/dev/null | grep -q '^# define __counted_by(member)'; then
+        info "No CONFIG_CC_HAS_COUNTED_BY __counted_by in $file - nothing to hide"
+        return 0
+    fi
+
+    sed -i '/^#ifdef CONFIG_CC_HAS_COUNTED_BY$/{N;s|^#ifdef CONFIG_CC_HAS_COUNTED_BY\n\(# define __counted_by(member)\)|#if defined(CONFIG_CC_HAS_COUNTED_BY) \&\& !defined(__GENKSYMS__) /* NovaGKI: __counted_by hidden from genksyms, GKI CRCs */\n\1|}' "$file"
+    if grep -q "NovaGKI: __counted_by hidden from genksyms" "$file"; then
+        success "__counted_by hidden from genksyms (GKI's KMI CRCs)"
+    else
+        warning "Could not hide __counted_by from genksyms in $file"
+    fi
+}
+
 # Zero heap memory on free by default without CONFIG_INIT_ON_FREE_DEFAULT_ON.
 # That option declares the exported init_on_free static key as
 # static_key_true instead of GKI's static_key_false, which changes its KMI

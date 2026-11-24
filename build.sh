@@ -145,6 +145,7 @@ apply_force_load_module_patch
 apply_s2idle_wake_gate
 apply_extract_cert_key_pass_patch
 keep_gki_ll_max_header
+hide_counted_by_from_genksyms
 # Part of the hardening set (configs/hardening.config)
 if [ "${HARDENING:-true}" = "true" ]; then
   default_init_on_free_on
