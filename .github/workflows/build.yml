@@ -1,4 +1,4 @@
-name: GKID Builder
+name: NovaGKI Builder
 permissions:
   contents: write
   actions: write
@@ -74,7 +74,7 @@ on:
         default: true
 
       STOCK_NAME:
-        description: "Report a stock GKI style kernel release instead of the project name (-GKID-rN-...)"
+        description: "Report a stock GKI style kernel release instead of the project name (-NovaGKI-rN-...)"
         type: boolean
         default: false
 

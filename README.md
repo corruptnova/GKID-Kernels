@@ -1,10 +1,10 @@
-# [Project name]
+# NovaGKI
 
 GKI kernels for Android devices on Linux 5.10, 5.15, 6.1, 6.6 and 6.12, with FinaSU or BakaSU root, SuSFS hiding, KMI-safe hardening and performance tuning.
 
 > [!NOTE]
 > **Based on [GKID Kernels](https://github.com/ahmed-alnassif/GKID-Kernels) by [Ahmed Al-Nassif](https://github.com/ahmed-alnassif).**
-> This project is a fork of GKID's `dev` branch at [`ef6c99d`](https://github.com/ahmed-alnassif/GKID-Kernels/commit/ef6c99dc6fc10f120cc02c37e721ab959a2fbd9c) (October 2026). Most of the build system, patches and configs come from GKID; [What's different from GKID](#whats-different-from-gkid) lists what changed here. GKID's own 6.1 kernel source is [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1). For the original project, its releases and its community, go to GKID.
+> NovaGKI is a fork of GKID's `dev` branch at [`ef6c99d`](https://github.com/ahmed-alnassif/GKID-Kernels/commit/ef6c99dc6fc10f120cc02c37e721ab959a2fbd9c) (October 2026). Most of the build system, patches and configs come from GKID; [What's different from GKID](#whats-different-from-gkid) lists what changed here. GKID's own 6.1 kernel source is [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1). For the original project, its releases and its community, go to GKID.
 
 ## Will it work on my device?
 
@@ -30,7 +30,7 @@ Every line builds from AOSP's GKI kernel source.
 
 ## Variants
 
-Each release has one zip per variant for each kernel line:
+Each release has one zip per variant for each kernel line, named `NovaGKI-<variant>-<release>-<Linux version>.zip`:
 
 | Variant | Root | Manager app | NoMount |
 |---|---|---|---|
@@ -95,7 +95,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **AutoFDO:** uses the sample profile Google ships in the GKI tree (6.6 and 6.12).
 - **KMI check:** symbol CRCs are checked after each build. By default this only warns.
 - **Stock-style kernel name (optional, `STOCK_NAME`):**
-  - Reports a stock-style release (for example `-android15-8-g…`) instead of the project name.
+  - Reports a stock-style release (for example `-android15-8-g…`) instead of `-NovaGKI-rN-…`.
   - Can copy a stock kernel's builder, compiler and build date.
   - Always keeps the real patch level, because faking it stops vendor modules from loading and bootloops the phone.
 - **CI:** builds the BakaSU and FinaSU variants for the kernel line you pick, or all lines. Telegram posting and the Telegram upload workflow are removed.
@@ -112,7 +112,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **Dropped patches:** `int_sqrt` (slower and wrong for very large inputs) and `lib/string` (unused on arm64).
 - **Patch rebases:** patches are rebased per GKI line and checked against current AOSP.
 - **Post-flash check:** added the on-device check script.
-- **Build identity:** kernels report your repo's owner as the builder (`/proc/version`), use UTC for release dates, and no longer credit GKID's author as the builder in the installer.
+- **Build identity:** kernels are named NovaGKI (`uname -r` shows `-NovaGKI-rN-…`), report your repo's owner as the builder (`/proc/version`) and use UTC for release dates. The installer shows NovaGKI's banner and links to this repo's issues instead of GKID's Telegram, and no longer credits GKID's author as the builder.
 
 ## What's inside
 
@@ -168,7 +168,7 @@ To make it permanent, put the command in a script in `/data/adb/service.d/`.
 
 ## Building
 
-Builds run on GitHub Actions. Open the Actions tab, select the build workflow ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a pre-release with all the lines it built. Jobs run two at a time, so an `All` run (10 jobs) takes about five times as long as a single line.
+Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a pre-release with all the lines it built. Jobs run two at a time, so an `All` run (10 jobs) takes about five times as long as a single line.
 
 | Input | Default | What it does |
 |---|---|---|

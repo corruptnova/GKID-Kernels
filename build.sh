@@ -4,7 +4,7 @@ WORKDIR="$(pwd)"
 RELEASE_DIR="$WORKDIR/artifacts"
 
 # Project name: zip names, release names and the kernel's -NAME-rN release suffix
-KERNEL_NAME="GKID"
+KERNEL_NAME="NovaGKI"
 # Shown in /proc/version as builder@host; forks get their own owner name
 BUILD_USER="${GITHUB_REPOSITORY_OWNER:-builder}"
 BUILD_HOST="$KERNEL_NAME"
@@ -23,7 +23,7 @@ RELEASE="$(date +v%y.%m.%d)${RUN_NUM}"
 mkdir -p $RELEASE_DIR
 
 # Releases are published to the repo the workflow runs in
-GKI_RELEASES_REPO="https://github.com/${GITHUB_REPOSITORY:-corruptnova/GKID-Kernels}"
+GKI_RELEASES_REPO="https://github.com/${GITHUB_REPOSITORY:-$(git -C "$WORKDIR" remote get-url origin 2>/dev/null | sed -E 's#^.*github\.com[:/]##; s#\.git$##')}"
 AK3_ZIP_NAME="$KERNEL_NAME-VARIANT-REL-KVER.zip"
 OUTDIR="$WORKDIR/out"
 KSRC="$WORKDIR/ksrc"
@@ -603,9 +603,15 @@ log "Cloning anykernel from $(simplify_gh_url "$ANYKERNEL_REPO")"
 git clone -q --depth=1 $ANYKERNEL_REPO anykernel
 
 AK3_ZIP_NAME=${AK3_ZIP_NAME//REL/$RELEASE}
+# AK3-GKID shows GKID's banner and messages on the install screen; use ours
+cp "$WORKDIR/ak3/banner" "$WORKDIR/anykernel/banner"
 sed -i \
   -e "s/kernel.string=.*/kernel.string=${KERNEL_NAME} ${RELEASE} ${LINUX_VERSION} ${VARIANT}/g" \
   -e "s/supported_kernel=\".*\"/supported_kernel=\"${KERNEL_VERSION}\"/g" \
+  -e "s/GKID Supported:/${KERNEL_NAME} supported:/" \
+  -e "s/Thank you for using GKID/Thank you for using ${KERNEL_NAME}/" \
+  -e "s#^ui_print \"Please join our community.*#ui_print \"Help and bug reports: ${GKI_RELEASES_REPO}/issues\"#" \
+  -e "/t\.me\/ahmed_alnassif_tg/d" \
   $WORKDIR/anykernel/anykernel.sh
 
 cd anykernel

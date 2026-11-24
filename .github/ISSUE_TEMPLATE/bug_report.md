@@ -13,8 +13,8 @@ A clear and concise description of the issue (e.g., bootloop, WiFi not working, 
 **Device & Environment**
 - **Device:** [e.g., Pixel 9 (tokay)]
 - **ROM:** [e.g., HyperOS 3.0, AOSP 16]
-- **Kernel zip:** [the file you flashed, e.g., `GKID-FinaSU+SuSFS-v26.11.23-r22-6.6.144.zip`]
-- **Kernel version:** [output of `uname -r`, e.g., `6.6.144-GKID-r22-a1b2c3d4e5f6`]
+- **Kernel zip:** [the file you flashed, e.g., `NovaGKI-FinaSU+SuSFS-v26.11.24-r23-6.6.144.zip`]
+- **Kernel version:** [output of `uname -r`, e.g., `6.6.144-NovaGKI-r23-a1b2c3d4e5f6`]
 - **Stock kernel version:** [`uname -r` before flashing, e.g., `6.6.57-android15-8-g…`]
 
 **To Reproduce**

@@ -22,7 +22,7 @@ Any alternative solutions, workarounds, or patches you've tried.
 **Device & Environment (if relevant)**
 - **Device:** [e.g., Pixel 9 (tokay)]
 - **ROM:** [e.g., HyperOS 3.0, AOSP 16]
-- **Current kernel zip:** [e.g., `GKID-BakaSU+SuSFS-…-6.1.182.zip`]
+- **Current kernel zip:** [e.g., `NovaGKI-BakaSU+SuSFS-…-6.1.182.zip`]
 
 **Additional context**
 - Links to relevant patches, commits, or upstream discussions

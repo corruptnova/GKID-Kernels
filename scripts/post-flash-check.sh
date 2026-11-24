@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# GKID post-flash checks: run on the device after flashing a build.
+# NovaGKI post-flash checks: run on the device after flashing a build.
 #
 #   adb push scripts/post-flash-check.sh /data/local/tmp/
 #   adb shell sh /data/local/tmp/post-flash-check.sh
@@ -33,9 +33,9 @@ if [ "$1" = "--suspend" ]; then
 fi
 
 if [ "$(id -u)" != "0" ]; then
-	if [ -z "$GKID_CHECK_ELEVATED" ] && command -v su >/dev/null 2>&1; then
+	if [ -z "$NOVAGKI_CHECK_ELEVATED" ] && command -v su >/dev/null 2>&1; then
 		echo "Not root, re-running through su (approve the prompt in your root manager)..."
-		exec su -c "GKID_CHECK_ELEVATED=1 sh '$0' $*"
+		exec su -c "NOVAGKI_CHECK_ELEVATED=1 sh '$0' $*"
 	fi
 	echo "This needs root. Grant Shell root access in your root manager, then run:"
 	echo "  su -c 'sh $0'"
@@ -51,13 +51,13 @@ section "Kernel"
 info "$(cat /proc/version)"
 # STOCK_NAME builds report a stock version line, so fall back to the compiler
 # recorded in the kernel config, which only root can read.
-if grep -q GKID /proc/version; then
-	pass "running a GKID kernel"
+if grep -q NovaGKI /proc/version; then
+	pass "running a NovaGKI kernel"
 elif grep -q Neutron /proc/version ||
 	zcat /proc/config.gz 2>/dev/null | grep -q '^CONFIG_CC_VERSION_TEXT="Neutron'; then
-	pass "running a GKID kernel built with STOCK_NAME"
+	pass "running a NovaGKI kernel built with STOCK_NAME"
 else
-	fail "kernel is not a GKID build (flashed the right image?)"
+	fail "kernel is not a NovaGKI build (flashed the right image?)"
 fi
 
 # --------------------------------------------------------------------------
@@ -96,7 +96,7 @@ fi
 section "Wakelock cap (add_timeout_wakelocks_globally)"
 WL=/sys/power/wake_lock
 if [ -w "$WL" ]; then
-	name="gkid_check_$$"
+	name="novagki_check_$$"
 	echo "$name" > "$WL"
 	if grep -qw "$name" "$WL"; then
 		sleep 1
@@ -150,8 +150,8 @@ else
 	fi
 
 	# Names that contain zero-width characters must still be usable
-	zw="/sdcard/gkid${ZWJ}check_$$.txt"
-	plain="/sdcard/gkidcheck_$$.txt"
+	zw="/sdcard/novagki${ZWJ}check_$$.txt"
+	plain="/sdcard/novagkicheck_$$.txt"
 	if echo test > "$zw" 2>/dev/null; then
 		if [ -e "$zw" ] && [ "$(cat "$zw")" = "test" ]; then
 			pass "file with a zero-width joiner in its name can be created and read"
