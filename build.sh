@@ -144,16 +144,20 @@ apply_kernel_patches
 apply_force_load_module_patch
 apply_s2idle_wake_gate
 apply_extract_cert_key_pass_patch
+keep_gki_ll_max_header
 cleanup_abi_gki_protected_exports
 
 
 
 log "Applying BBRv3 patch"
-# Prefer a patch rebased for this GKI line (e.g. bbrv3-6.6.patch), else the generic one
+# KMI-safe backport for this GKI line: adds BBRv3 as a separate "bbr3" algorithm
+# next to stock BBR and keeps the TCP structures at GKI's layout
 BBR_PATCH="$KERNEL_PATCHES/bbrv3/bbrv3-${KERNEL_VERSION}.patch"
-[ -f "$BBR_PATCH" ] || BBR_PATCH="$KERNEL_PATCHES/bbrv3/bbrv3.patch"
-log "Using $(basename "$BBR_PATCH")"
-apply_patch_file "$BBR_PATCH"
+if [ -f "$BBR_PATCH" ]; then
+  apply_patch_file "$BBR_PATCH"
+else
+  warning "No BBRv3 patch for ${KERNEL_VERSION}; building with stock BBR only"
+fi
 
 log "Applying wakelock timeout patch"
 # Caps userspace /sys/power/wake_lock locks taken without a timeout to 500ms
@@ -587,6 +591,7 @@ KMI_REPORT="$RELEASE_DIR/kmi-report-${KERNEL_VERSION}-${VARIANT}.txt"
 KMI_SUMMARY="$WORKDIR/kmi-summary.txt"
 echo "::group::[*] KMI symbol CRC check"
 python3 "$KMI_CHECK" --ksrc "$KSRC" --symvers "$OUTDIR/vmlinux.symvers" \
+  --module-symvers "$OUTDIR/Module.symvers" \
   --protected-exports "$KMI_REF_DIR/abi_gki_protected_exports_aarch64" \
   --report "$KMI_REPORT" --summary-file "$KMI_SUMMARY"
 KMI_RC=$?

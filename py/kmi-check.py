@@ -14,6 +14,12 @@ Finds, in the kernel source tree:
                 android/abi_gki_aarch64.xml  (5.10, 5.15)
   Symbol lists: android/abi_gki_aarch64[_<vendor>] or gki/aarch64/symbols/<vendor>
 
+The ABI also lists symbols that Android's own GKI modules export (zsmalloc,
+zram and the protected modules). This build only replaces the kernel image,
+so the phone keeps its stock copies of those modules and their symbols aren't
+missing. They are told apart with the build's Module.symvers (every line) and
+android/abi_gki_protected_exports_aarch64 (6.1, 6.6).
+
 Exit status: 0 = no vendor-used symbol changed or went missing,
              1 = some did, 2 = usage error or files not found.
 """
@@ -77,6 +83,17 @@ def parse_symvers(path):
 	return symbols
 
 
+def parse_module_exports(path):
+	"""Module.symvers: names exported by modules (third field isn't vmlinux)."""
+	names = set()
+	with open(path, encoding="utf-8") as f:
+		for line in f:
+			fields = line.split()
+			if len(fields) >= 3 and fields[2] != "vmlinux":
+				names.add(fields[1])
+	return names
+
+
 def parse_name_list(path):
 	"""Symbol list or protected exports: one name per line; skips headers and comments."""
 	names = set()
@@ -121,6 +138,7 @@ def main():
 	parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
 	parser.add_argument("--ksrc", required=True, help="kernel source tree")
 	parser.add_argument("--symvers", required=True, help="vmlinux.symvers from the build")
+	parser.add_argument("--module-symvers", help="Module.symvers from the build (exports of every module)")
 	parser.add_argument("--protected-exports", help="copy of android/abi_gki_protected_exports_aarch64")
 	parser.add_argument("--report", help="write the full report (every symbol) here")
 	parser.add_argument("--summary-file", help="write a one-line summary here")
@@ -139,17 +157,21 @@ def main():
 	kernel = parse_symvers(args.symvers)
 	lists = find_symbol_lists(args.ksrc)
 	vendor_used = set().union(*lists.values()) if lists else set()
-	protected = parse_name_list(args.protected_exports) if (
-		args.protected_exports and os.path.isfile(args.protected_exports)) else None
+	# Symbols Android's GKI modules export; None when neither source is available
+	module_exports = None
+	for path, parse in ((args.module_symvers, parse_module_exports),
+	                    (args.protected_exports, parse_name_list)):
+		if path and os.path.isfile(path):
+			module_exports = (module_exports or set()) | parse(path)
 
 	shared = abi.keys() & kernel.keys()
 	changed = sorted(s for s in shared if abi[s] != kernel[s])
 	changed_set = set(changed)
 	changed_used = [s for s in changed if s in vendor_used]
 	missing = sorted(abi.keys() - kernel.keys())
-	if protected is not None:
-		missing_module = [s for s in missing if s in protected]
-		missing_real = [s for s in missing if s not in protected]
+	if module_exports is not None:
+		missing_module = [s for s in missing if s in module_exports]
+		missing_real = [s for s in missing if s not in module_exports]
 	else:
 		missing_module, missing_real = [], missing
 	missing_used = [s for s in missing_real if s in vendor_used]
@@ -167,15 +189,15 @@ def main():
 		lines.append(f"  vendor symbol lists affected: {top(per_list)}")
 	if changed:
 		lines.append(f"  most affected areas: {top(collections.Counter(area(s) for s in changed))}")
-	if protected is not None:
+	if module_exports is not None:
 		lines.append(
 			f"Missing from this kernel: {len(missing)} "
-			f"({len(missing_module)} exported by Android's protected GKI modules, which this build "
-			f"doesn't replace; {len(missing_real)} other, {len(missing_used)} of them used by vendor modules)")
+			f"({len(missing_module)} exported by Android's GKI modules, which the phone keeps; "
+			f"{len(missing_real)} other, {len(missing_used)} of them used by vendor modules)")
 	else:
 		lines.append(
 			f"Missing from this kernel: {len(missing)}, {len(missing_used)} of them used by vendor modules "
-			f"(this line has no protected-exports list, so exports of Android's own GKI modules "
+			f"(no Module.symvers or protected-exports list, so exports of Android's own GKI modules "
 			f"can't be told apart and are included)")
 
 	def section(title, names, with_crc=False):
@@ -198,7 +220,7 @@ def main():
 		report += section("All symbols with changed CRCs", changed, True) + [""]
 		report += section("All symbols missing from this kernel", missing_real) + [""]
 		if missing_module:
-			report += section("Missing, exported by Android's protected GKI modules (expected)", missing_module)
+			report += section("Missing, exported by Android's GKI modules (expected)", missing_module)
 		with open(args.report, "w", encoding="utf-8") as f:
 			f.write("\n".join(report) + "\n")
 

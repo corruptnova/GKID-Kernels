@@ -328,7 +328,8 @@ Based on [GKID Kernels](https://github.com/ahmed-alnassif/GKID-Kernels) by [Ahme
 > Switch TCP congestion control until the next reboot:
 > ```sh
 > su -c "sysctl -w net.ipv4.tcp_congestion_control=westwood"   # Westwood+
-> su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"        # BBRv3, the default
+> su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr3"       # BBRv3, the default
+> su -c "sysctl -w net.ipv4.tcp_congestion_control=bbr"        # stock BBR (v1)
 > ```
 > To make it permanent, put the command in a script in `/data/adb/service.d/`.
 

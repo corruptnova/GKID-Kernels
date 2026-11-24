@@ -43,19 +43,19 @@ index 8427853..2857c0d 100644
  
  /* RTT measurement */
 diff --git a/include/net/tcp.h b/include/net/tcp.h
-index 3255a19..c3b2c02 100644
+index 4c94211..51b6641 100644
 --- a/include/net/tcp.h
 +++ b/include/net/tcp.h
-@@ -376,6 +376,8 @@ static inline void tcp_dec_quickack_mode(struct sock *sk)
+@@ -385,6 +385,8 @@ static inline void tcp_dec_quickack_mode(struct sock *sk)
  #define	TCP_ECN_QUEUE_CWR	2
  #define	TCP_ECN_DEMAND_CWR	4
  #define	TCP_ECN_SEEN		8
 +#define	TCP_ECN_LOW				16
-+#define	TCP_ECN_ECT_PERMANENT	3
++#define	TCP_ECN_ECT_PERMANENT	32
  
  enum tcp_tw_status {
  	TCP_TW_SUCCESS = 0,
-@@ -796,6 +798,15 @@ static inline void tcp_fast_path_check(struct sock *sk)
+@@ -785,6 +787,15 @@ static inline u32 __tcp_set_rto(const struct tcp_sock *tp)
  
  u32 tcp_delack_max(const struct sock *sk);
  
@@ -71,7 +71,7 @@ index 3255a19..c3b2c02 100644
  /* Compute the actual rto_min value */
  static inline u32 tcp_rto_min(const struct sock *sk)
  {
-@@ -901,6 +912,11 @@ static inline u32 tcp_stamp_us_delta(u64 t1, u64 t0)
+@@ -890,6 +901,11 @@ static inline u32 tcp_stamp_us_delta(u64 t1, u64 t0)
  	return max_t(s64, t1 - t0, 0);
  }
  
@@ -83,7 +83,7 @@ index 3255a19..c3b2c02 100644
  /* provide the departure time in us unit */
  static inline u64 tcp_skb_timestamp_us(const struct sk_buff *skb)
  {
-@@ -989,10 +1005,24 @@ struct tcp_skb_cb {
+@@ -981,10 +997,24 @@ struct tcp_skb_cb {
  			      unused:11;
  			/* pkts S/ACKed so far upon tx of skb, incl retrans: */
  			__u32 delivered;
@@ -112,7 +112,7 @@ index 3255a19..c3b2c02 100644
  		} tx;   /* only used for outgoing skbs */
  		union {
  			struct inet_skb_parm	h4;
-@@ -1105,7 +1135,9 @@ enum tcp_ca_event {
+@@ -1097,7 +1127,9 @@ enum tcp_ca_event {
  	CA_EVENT_LOSS,		/* loss timeout */
  	CA_EVENT_ECN_NO_CE,	/* ECT set, but not CE marked */
  	CA_EVENT_ECN_IS_CE,	/* received CE marked IP packet */
@@ -122,7 +122,7 @@ index 3255a19..c3b2c02 100644
  
  /* Information about inbound ACK, passed to cong_ops->in_ack_event() */
  enum tcp_ca_ack_event_flags {
-@@ -1127,7 +1159,11 @@ enum tcp_ca_ack_event_flags {
+@@ -1119,7 +1151,11 @@ enum tcp_ca_ack_event_flags {
  #define TCP_CONG_NON_RESTRICTED 0x1
  /* Requires ECN/ECT set on all packets */
  #define TCP_CONG_NEEDS_ECN	0x2
@@ -135,7 +135,7 @@ index 3255a19..c3b2c02 100644
  
  union tcp_cc_info;
  
-@@ -1162,7 +1198,13 @@ struct rate_sample {
+@@ -1154,7 +1190,13 @@ struct rate_sample {
  	bool is_app_limited;	/* is sample from packet with bubble in pipe? */
  	bool is_retrans;	/* is sample from retransmission? */
  	bool is_ack_delayed;	/* is this (likely) a delayed ACK? */
@@ -149,7 +149,7 @@ index 3255a19..c3b2c02 100644
  
  struct tcp_congestion_ops {
  /* fast path fields are put first to fill one cache line */
-@@ -1252,6 +1294,14 @@ static inline char *tcp_ca_get_name_by_key(u32 key, char *buffer)
+@@ -1244,6 +1286,14 @@ static inline char *tcp_ca_get_name_by_key(u32 key, char *buffer)
  }
  #endif
  
@@ -164,7 +164,7 @@ index 3255a19..c3b2c02 100644
  static inline bool tcp_ca_needs_ecn(const struct sock *sk)
  {
  	const struct inet_connection_sock *icsk = inet_csk(sk);
-@@ -1283,6 +1333,21 @@ static inline bool tcp_skb_sent_after(u64 t1, u64 t2, u32 seq1, u32 seq2)
+@@ -1275,6 +1325,21 @@ static inline bool tcp_skb_sent_after(u64 t1, u64 t2, u32 seq1, u32 seq2)
  	return t1 > t2 || (t1 == t2 && after(seq1, seq2));
  }
  
@@ -186,7 +186,7 @@ index 3255a19..c3b2c02 100644
  /* These functions determine how the current flow behaves in respect of SACK
   * handling. SACK is negotiated with the peer, and therefore it can vary
   * between different flows.
-@@ -2447,6 +2512,83 @@ void tcp_plb_update_state(const struct sock *sk, struct tcp_plb_state *plb,
+@@ -2472,6 +2537,83 @@ void tcp_plb_update_state(const struct sock *sk, struct tcp_plb_state *plb,
  void tcp_plb_check_rehash(struct sock *sk, struct tcp_plb_state *plb);
  void tcp_plb_update_state_upon_rto(struct sock *sk, struct tcp_plb_state *plb);
  
@@ -399,10 +399,10 @@ index 9792e82..36f31e9 100644
  	/* Clean up fastopen related fields */
 diff --git a/net/ipv4/tcp_bbr3.c b/net/ipv4/tcp_bbr3.c
 new file mode 100644
-index 0000000..23da415
+index 0000000..3703f83
 --- /dev/null
 +++ b/net/ipv4/tcp_bbr3.c
-@@ -0,0 +1,2360 @@
+@@ -0,0 +1,2364 @@
 +/* BBR (Bottleneck Bandwidth and RTT) congestion control
 + *
 + * BBR is a model-based congestion control algorithm that aims for low queues,
@@ -875,6 +875,10 @@ index 0000000..23da415
 +{
 +	struct tcp_sock *tp = tcp_sk(sk);
 +	struct bbr3 *bbr = bbr3_get_priv(sk);
++
++	/* Not set up yet (e.g. a Fast Open SYN with data) or its allocation failed */
++	if (!bbr || !bbr->initialized)
++		return;
 +
 +	if (event == CA_EVENT_TX_START) {
 +		if (!tp->app_limited)
@@ -3014,7 +3018,7 @@ index d683ff9..77092d2 100644
  		goto rearm_timer;
  
 diff --git a/net/ipv4/tcp_rate.c b/net/ipv4/tcp_rate.c
-index a8f6d9d..3ad92f7 100644
+index a8f6d9d..9d3b723 100644
 --- a/net/ipv4/tcp_rate.c
 +++ b/net/ipv4/tcp_rate.c
 @@ -34,6 +34,24 @@
@@ -3081,6 +3085,18 @@ index a8f6d9d..3ad92f7 100644
  
  	rs->delivered_ce = tp->delivered_ce - rs->prior_delivered_ce;
  	/* delivered_ce occupies less than 32 bits in the skb control block */
+@@ -155,8 +178,9 @@ void tcp_rate_gen(struct sock *sk, u32 delivered, u32 lost,
+ 	 * longer phase.
+ 	 */
+ 	snd_us = rs->interval_us;				/* send phase */
+-	ack_us = tcp_stamp_us_delta(tp->tcp_mstamp,
+-				    rs->prior_mstamp); /* ack phase */
++	/* prior_mstamp comes from the 32-bit tx.delivered_mstamp */
++	ack_us = tcp_stamp32_us_delta(tp->tcp_mstamp,
++				      rs->prior_mstamp); /* ack phase */
+ 	rs->interval_us = max(snd_us, ack_us);
+ 
+ 	/* Record both segment send and ack receive intervals */
 -- 
 2.47.3
 
