@@ -304,9 +304,10 @@ jobs:
         with:
           name: all-builds-${{ github.run_number }}
           retention-days: 7
+          # merge-multiple extracts every build's files to the top of downloaded-artifacts/
           path: |
-            downloaded-artifacts/artifacts/*.txt
-            downloaded-artifacts/artifacts/*.zip
+            downloaded-artifacts/*.txt
+            downloaded-artifacts/*.zip
 
   release:
     needs: build
