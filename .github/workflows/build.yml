@@ -1,4 +1,4 @@
-name: GKID Builder
+name: NovaGKI Builder
 permissions:
   contents: write
   actions: write
@@ -31,6 +31,18 @@ on:
           - "thinLTO"
           - "fullLTO"
 
+      KERNEL_VERSION:
+        description: "GKI kernel line to build"
+        default: "All"
+        type: choice
+        options:
+          - "All"
+          - "5.10"
+          - "5.15"
+          - "6.1"
+          - "6.6"
+          - "6.12"
+
       CLEAN_LTO_CACHE:
         description: "Clean ThinLTO cache to fix .config bug"
         type: boolean
@@ -62,7 +74,7 @@ on:
         default: true
 
       STOCK_NAME:
-        description: "Report a stock GKI style kernel release instead of -GKID-..."
+        description: "Report a stock GKI style kernel release instead of the project name (-NovaGKI-rN-...)"
         type: boolean
         default: false
 
@@ -112,8 +124,8 @@ jobs:
       - name: Generate build matrix
         id: set-matrix
         env:
-          # CI builds only GKI 6.6 with BakaSU + SUSFS and FinaSU + SUSFS.
-          KERNEL_VERSION: "6.6"
+          # CI builds BakaSU + SUSFS and FinaSU + SUSFS for the selected GKI line(s).
+          KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
           BUILD_VANILLA: "false"
           BUILD_KSU: "false"
           BUILD_KSU_SUSFS: "true"
@@ -127,6 +139,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Each job downloads and uploads a multi-GB ccache archive on the same
+      # release; running the whole matrix at once gets throttled by GitHub.
+      max-parallel: 2
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     steps:
@@ -153,7 +168,6 @@ jobs:
       - name: Run Build Script
         env:
           GH_TOKEN: ${{ github.token }}
-          KERNEL_REPO: https://github.com/ahmed-alnassif/GKI-Duchamp-6.1
           KERNEL_VERSION: ${{ matrix.kernel_version }}
           KSU: ${{ matrix.KSU }}
           KSU_COMPAT: ${{ matrix.KSU_COMPAT }}
@@ -237,6 +251,9 @@ jobs:
           BASE_NAME=${{ env.BASE_NAME }}
           KSU=${{ matrix.KSU }}
           KSU_SUSFS=${{ matrix.KSU_SUSFS }}
+          KSU_COMPAT=${{ matrix.KSU_COMPAT }}
+          No_DS=${{ matrix.No_DS }}
+          VARIANT=${{ env.VARIANT }}
           KERNEL_VERSION=${{ env.KERNEL_VERSION }}
           ANDROID_RELEASE=${{ env.ANDROID_RELEASE }}
           KERNEL_SOURCE_REPO=${{ env.KERNEL_SOURCE_REPO }}
@@ -317,10 +334,13 @@ jobs:
       - name: Load environment from builds and prepare release body
         env:
           TEST_INPUT: ${{ inputs.TEST }}
-          DROIDSPACES_INPUT: ${{ inputs.DroidSpaces }}
+          DROIDSPACES_INPUT: ${{ inputs.DROIDSPACES }}
           NH_INPUT: ${{ inputs.NH }}
           NM_INPUT: ${{ inputs.NM }}
           LTO_INPUT: ${{ inputs.LTO }}
+          AUTOFDO_INPUT: ${{ inputs.AUTOFDO }}
+          HARDENING_INPUT: ${{ inputs.HARDENING }}
+          STOCK_NAME_INPUT: ${{ inputs.STOCK_NAME }}
         run: python3 .github/scripts/prepare_release.py
 
       - name: Upload All Builds to release repo

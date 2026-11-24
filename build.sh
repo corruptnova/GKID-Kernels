@@ -3,10 +3,13 @@
 WORKDIR="$(pwd)"
 RELEASE_DIR="$WORKDIR/artifacts"
 
-KERNEL_NAME="GKID"
-USER="ahmed-alnassif"
-HOST="GKID"
-TIMEZONE="Asia/Damascus"
+# Project name: zip names, release names and the kernel's -NAME-rN release suffix
+KERNEL_NAME="NovaGKI"
+# Shown in /proc/version as builder@host; forks get their own owner name
+BUILD_USER="${GITHUB_REPOSITORY_OWNER:-builder}"
+BUILD_HOST="$KERNEL_NAME"
+# Release tags and build timestamps use this time zone
+TIMEZONE="UTC"
 ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 
 KERNEL_DEFCONFIG="gki_defconfig"
@@ -19,7 +22,8 @@ RELEASE="$(date +v%y.%m.%d)${RUN_NUM}"
 
 mkdir -p $RELEASE_DIR
 
-GKI_RELEASES_REPO="https://github.com/ahmed-alnassif/GKID-Kernels"
+# Releases are published to the repo the workflow runs in
+GKI_RELEASES_REPO="https://github.com/${GITHUB_REPOSITORY:-$(git -C "$WORKDIR" remote get-url origin 2>/dev/null | sed -E 's#^.*github\.com[:/]##; s#\.git$##')}"
 AK3_ZIP_NAME="$KERNEL_NAME-VARIANT-REL-KVER.zip"
 OUTDIR="$WORKDIR/out"
 KSRC="$WORKDIR/ksrc"
@@ -32,15 +36,7 @@ FINASU_REF="${FINASU_REF:-dev}"
 
 source $WORKDIR/functions.sh
 
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  if [ "$NH" = "true" ]; then
-    KERNEL_BRANCH="GKID-NH"
-  else
-    KERNEL_BRANCH="GKID-6.1"
-  fi
-else
-  IFS='|' read -r KERNEL_REPO KERNEL_BRANCH KERNEL_KMI <<< "$(resolve_kernel_source "$KERNEL_VERSION")"
-fi
+IFS='|' read -r KERNEL_REPO KERNEL_BRANCH KERNEL_KMI <<< "$(resolve_kernel_source "$KERNEL_VERSION")"
 
 ANDROID_RELEASE="$(android_release_for_version "$KERNEL_VERSION")"
 echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
@@ -62,11 +58,7 @@ trap 'echo "[-] Received SIGTERM at $(date) - possible GitHub kill" >> "$BUILD_L
 trap 'echo "[-] Received SIGINT at $(date)" >> "$BUILD_LOGS"' INT
 
 log "Cloning kernel source from $(simplify_gh_url "$KERNEL_REPO")"
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  git clone -q --depth=1 --recurse-submodules "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
-else
-  git clone -q --depth=1 "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
-fi
+git clone -q --depth=1 "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
 
 cd $KSRC
 LINUX_VERSION=$(make kernelversion)
@@ -77,7 +69,6 @@ cd $WORKDIR
 
 log "Setting Kernel variant"
 case "$KSU" in
-  "SKSU") VARIANT="SukiSU-Ultra" ;;
   "BSU") VARIANT="BakaSU" ;;
   "FSU") VARIANT="FinaSU" ;;
   "KSU") VARIANT="KernelSU" ;;
@@ -91,13 +82,8 @@ SUSFS_URL="https://gitlab.com/simonpunk/susfs4ksu"
 SUSFS_DIR="$WORKDIR/susfs"
 SUSFS_PATCHES="${SUSFS_DIR}/kernel_patches"
 
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  SUSFS_BRANCH="gki-android14-6.1"
-  SUSFS_PATCH="gki-android14-6.1"
-else
-  SUSFS_BRANCH="$(resolve_susfs_branch "$KERNEL_VERSION")"
-  SUSFS_PATCH="$SUSFS_BRANCH"
-fi
+SUSFS_BRANCH="$(resolve_susfs_branch "$KERNEL_VERSION")"
+SUSFS_PATCH="$SUSFS_BRANCH"
 
 log "Changelog of repos"
 clone_susfs 5
@@ -106,12 +92,8 @@ git log --pretty=format:"- [%h](https://${SUSFS_URL#https://}/commit/%H) %s" -5 
 > "$RELEASE_DIR/susfs_changelog-${KERNEL_VERSION}.txt"
 cd ..
 
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  generate_gh_changelog "ahmed-alnassif/GKI-Duchamp-6.1" "$KERNEL_BRANCH" 10 "$RELEASE_DIR/android_kernel-6.1_changelog.txt"
-else
-  echo "No changelog generator wired up yet for $KERNEL_VERSION" \
-    > "$RELEASE_DIR/android_kernel-${KERNEL_VERSION}_changelog.txt"
-fi
+echo "No changelog generator wired up yet for $KERNEL_VERSION" \
+  > "$RELEASE_DIR/android_kernel-${KERNEL_VERSION}_changelog.txt"
 generate_gh_changelog "maxsteeel/nomount" "master" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
 generate_gh_changelog "Baka-SU/BakaSU" "main" 5 "$RELEASE_DIR/BakaSU_changelog.txt"
@@ -156,33 +138,12 @@ echo "::endgroup::"
 
 echo "::group::[+] Applied patches"
 
-if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  apply_kernel_patches
-  apply_force_load_module_patch
-  apply_s2idle_wake_gate
-  apply_extract_cert_key_pass_patch
-  cleanup_abi_gki_protected_exports
-fi
+apply_kernel_patches
+apply_force_load_module_patch
+apply_s2idle_wake_gate
+apply_extract_cert_key_pass_patch
+cleanup_abi_gki_protected_exports
 
-if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  # The Duchamp 6.1 trees ship the SIMD memcmp from 0008, which uses q0-q5
-  # without kernel_neon_begin() and can corrupt user FP/SIMD state. Undo it.
-  MEMCMP_PATCH="$KERNEL_PATCHES/common/0008-arm64-lib-Optimize-memcmp.patch"
-  if git apply -R --check "$MEMCMP_PATCH" 2>/dev/null; then
-    git apply -R "$MEMCMP_PATCH" && success "Reverted SIMD memcmp (0008) in 6.1 tree"
-  else
-    log "6.1 tree has no SIMD memcmp from 0008, nothing to revert"
-  fi
-
-  # The Duchamp 6.1 trees also ship the "3x faster" int_sqrt, which is slower
-  # than upstream's __fls() version and returns the wrong root for x >= 2^62.
-  INT_SQRT_PATCH="$KERNEL_PATCHES/revert-6.1/0010-int_sqrt-Improve-3x-faster-integer-sqrt.patch"
-  if git apply -R --check "$INT_SQRT_PATCH" 2>/dev/null; then
-    git apply -R "$INT_SQRT_PATCH" && success "Reverted int_sqrt (0010) in 6.1 tree"
-  else
-    log "6.1 tree has no int_sqrt from 0010, nothing to revert"
-  fi
-fi
 
 
 log "Applying BBRv3 patch"
@@ -212,11 +173,7 @@ if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying NTSync patches..."
   curl -LSs "https://github.com/WildKernels/kernel_patches/raw/main/common/ntsync/ntsync_base.patch" | apply_patch_file
 
-  if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-    curl -LSs "https://github.com/WildKernels/kernel_patches/raw/main/common/ntsync/ntsync_compat_android14-6.1.patch" | apply_patch_file
-  else
-    apply_ntsync_compat_patch "$KERNEL_KMI"
-  fi
+  apply_ntsync_compat_patch "$KERNEL_KMI"
   success "NTSync patches applied"
 fi
 
@@ -245,7 +202,7 @@ elif [ "$DROIDSPACES" = "true" ] || [ "$NH" = "true" ]; then
   apply_patch_file "$KERNEL_PATCHES/droidspaces/001.GKI-6.12-or-above-fix_sysvipc_kabi.patch"
 fi
 
-if [ "$NH" = "true" ] && ! kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$No_DS" = "false" ]; then
+if [ "$NH" = "true" ] && [ "$No_DS" = "false" ]; then
   log "Applying NetHunter patches"
   # Prefer a variant rebased for this GKI line, else the generic one
   NH_PATCH="$KERNEL_PATCHES/nethunter/0001-mac80211-cfg80211-Add-monitor-mode-and-packet-inject-${KERNEL_VERSION}.patch"
@@ -307,10 +264,8 @@ if [ "$KSU" = "KSU" ]; then
     apply_patch_file "$PATCHES_DIR/0001-feat-escape-persistent_allow_list-to-kthread.patch"
     apply_patch_file "$PATCHES_DIR/0001-feat-supercalls-allow-userspace-to-pull-list-entries.patch"
     sed -i "/    git pull && echo \"\[+\] Repository updated.\"/d" "kernel/setup.sh"
-    git config --global user.email "mr.ahmed.nassif@gmail.com"
-    git config --global user.name "Ahmed Al-Nassif"
     git add .
-    git commit -m "susfs patch"
+    git -c user.name="CI" -c user.email="ci@localhost" commit -q -m "susfs patch"
     cd ..
     bash "KernelSU/kernel/setup.sh" "main"
 
@@ -352,16 +307,16 @@ if [ "${TODO:-kernel}" = "kernel" ]; then
   SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
   KERNEL_LOCALVERSION="-${KERNEL_NAME}${SUFFIX}"
 
-  # STOCK_NAME: report what a stock kernel reports instead of -GKID-...
+  # STOCK_NAME: report what a stock kernel reports instead of -${KERNEL_NAME}-rN-...
   if [ "${STOCK_NAME:-false}" = "true" ]; then
-    # Don't quietly ship the -GKID- name when a stock one was asked for
+    # Don't quietly ship the project name when a stock one was asked for
     if ! resolve_stock_identity; then
       error "STOCK_NAME: no usable stock identity"
       exit 1
     fi
     KERNEL_LOCALVERSION="$STOCK_LOCALVERSION"
-    USER="$STOCK_BUILD_USER"
-    HOST="$STOCK_BUILD_HOST"
+    BUILD_USER="$STOCK_BUILD_USER"
+    BUILD_HOST="$STOCK_BUILD_HOST"
 
     if [ -n "$STOCK_COMPILER" ]; then
       # Report the stock compiler in /proc/version. mkcompile_h builds that
@@ -383,8 +338,8 @@ if [ "${TODO:-kernel}" = "kernel" ]; then
   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
 fi
 
-export KBUILD_BUILD_USER="$USER"
-export KBUILD_BUILD_HOST="$HOST"
+export KBUILD_BUILD_USER="$BUILD_USER"
+export KBUILD_BUILD_HOST="$BUILD_HOST"
 if [ -n "${STOCK_BUILD_TIMESTAMP:-}" ]; then
   # Build date copied from the stock version line in STOCK_VERSION
   export KBUILD_BUILD_TIMESTAMP="$STOCK_BUILD_TIMESTAMP"
@@ -648,9 +603,15 @@ log "Cloning anykernel from $(simplify_gh_url "$ANYKERNEL_REPO")"
 git clone -q --depth=1 $ANYKERNEL_REPO anykernel
 
 AK3_ZIP_NAME=${AK3_ZIP_NAME//REL/$RELEASE}
+# AK3-GKID shows GKID's banner and messages on the install screen; use ours
+cp "$WORKDIR/ak3/banner" "$WORKDIR/anykernel/banner"
 sed -i \
-  -e "s/kernel.string=.*/kernel.string=${KERNEL_NAME} ${RELEASE} ${LINUX_VERSION} ${VARIANT} by Ahmed Al-Nassif (ahmed-alnassif)/g" \
+  -e "s/kernel.string=.*/kernel.string=${KERNEL_NAME} ${RELEASE} ${LINUX_VERSION} ${VARIANT}/g" \
   -e "s/supported_kernel=\".*\"/supported_kernel=\"${KERNEL_VERSION}\"/g" \
+  -e "s/GKID Supported:/${KERNEL_NAME} supported:/" \
+  -e "s/Thank you for using GKID/Thank you for using ${KERNEL_NAME}/" \
+  -e "s#^ui_print \"Please join our community.*#ui_print \"Help and bug reports: ${GKI_RELEASES_REPO}/issues\"#" \
+  -e "/t\.me\/ahmed_alnassif_tg/d" \
   $WORKDIR/anykernel/anykernel.sh
 
 cd anykernel

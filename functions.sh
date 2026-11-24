@@ -11,6 +11,7 @@ declare -A ANDROID_RELEASE_FOR_KVER=(
 declare -A GKI_BRANCH=(
   ["5.10"]="android12-5.10"
   ["5.15"]="android13-5.15"
+  ["6.1"]="android14-6.1"
   ["6.6"]="android15-6.6"
   ["6.12"]="android16-6.12"
 )
@@ -18,6 +19,7 @@ declare -A GKI_BRANCH=(
 declare -A GKI_AOSP_BRANCH=(
   ["5.10"]="android12-5.10-lts"
   ["5.15"]="android13-5.15-lts"
+  ["6.1"]="android14-6.1"  # main branch: the one Google builds GKI releases from; gets Android security fixes first
   ["6.6"]="android15-6.6"  # main branch: same 6.6.144 LTS level as -lts, but gets Android security fixes first
   ["6.12"]="android16-6.12-lts"
 )
@@ -168,11 +170,6 @@ resolve_finasu_manager_cert() {
 
   export FINASU_CERT_SIZE FINASU_CERT_HASH
   success "FinaSU manager certificate: size=$FINASU_CERT_SIZE sha256=$FINASU_CERT_HASH"
-}
-
-ksu_included() {
-  [ "$KSU" == "yes" ]
-  return $?
 }
 
 susfs_included() {
@@ -753,12 +750,6 @@ apply_susfs_patches() {
 
     cp -R $SUSFS_PATCHES/fs/* ./fs
     cp -R $SUSFS_PATCHES/include/linux/* ./include/linux/
-
-    if [ "$SUSFS_PATCH" = "gki-android14-6.1" ]; then
-      cd $SUSFS_DIR
-      apply_patch_file "$KERNEL_PATCHES/susfs/susfs_fs_namespace_fix.patch" || true
-      cd $OLDPWD
-    fi
 
     if ! patch -p1 --fuzz=3 < "$SUSFS_PATCHES/50_add_susfs_in_${SUSFS_PATCH}.patch"; then
         if [ "$KERNEL_KMI" = "android13-5.15" ]; then

@@ -10,7 +10,7 @@ registered with SuSFS via susfs_add_sus_type() /
 susfs_add_sus_avd_allowed_by_type().
 
 Upstream KernelSU wires those calls into add_type()/add_rule_raw() through
-kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch, but the GKID BakaSU
+kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch, but the NovaGKI BakaSU
 variant does not apply that patch and BakaSU's own sepolicy.c never calls
 them. Result: the injected "ksu"/"ksu_file" types (and any module-injected
 types such as "xposed_file"/"xposed_data" from a sepolicy.rule) are created
