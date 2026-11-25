@@ -115,6 +115,10 @@ fi
 export PATH="${CLANG_BIN}:$PATH"
 echo "::endgroup::"
 
+echo "::group::[*] Rust toolchain"
+setup_rust_toolchain "$KSRC"
+echo "::endgroup::"
+
 export CCACHE_DIR="$HOME/.ccache"
 export CCACHE_BASEDIR="$WORKDIR"
 export CCACHE_NOHARDLINK=true
@@ -440,6 +444,13 @@ KMI_CHECK="$WORKDIR/py/kmi-check.py"
 echo "::group::[*] Generating config"
 make ${MAKE_ARGS[@]} "$KERNEL_DEFCONFIG"
 echo "::endgroup::"
+
+# GKI wants Rust on this line but Kconfig dropped it: say why instead of
+# silently building without ashmem and the Rust binder exports
+if grep -q '^CONFIG_RUST=y' arch/arm64/configs/gki_defconfig && ! grep -q '^CONFIG_RUST=y' "$OUTDIR/.config"; then
+  echo "::warning::${KERNEL_VERSION}: Rust is unavailable, so CONFIG_RUST is off: no ashmem, and the Rust binder exports are missing (see 'make rustavailable' in the log)"
+  make ${MAKE_ARGS[@]} rustavailable || true
+fi
 
 # Root/hiding options to report as "not set" in /proc/config.gz (fake_config.patch)
 FAKE_DISABLE_CONFIGS="$(grep -oE '^CONFIG_(KSU|KPM|NOMOUNT|BBG)(_[A-Za-z0-9_]*)?=' "$OUTDIR/.config" | tr -d '=' | tr '\n' ' ' | sed 's/ $//')"

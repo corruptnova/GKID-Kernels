@@ -690,6 +690,51 @@ keep_gki_stack_protector() {
     fi
 }
 
+# 6.12+ GKI builds parts of the kernel in Rust: ashmem (CONFIG_ASHMEM depends
+# on RUST), the Rust binder module and its vendor hooks. Without a Rust
+# toolchain Kconfig quietly drops CONFIG_RUST, so those go missing: no
+# /dev/ashmem, and vendor modules using RUST_BINDER_LAYOUT, the Rust binder
+# hooks or the ashmem exports can't load. Install the rustc version the branch
+# pins in build.config.constants, with rust-src (the kernel builds core/alloc)
+# and bindgen (generates the C bindings).
+setup_rust_toolchain() {
+    local ksrc="$1" bindgen_ver="0.69.5" ver libdir
+
+    if ! grep -q '^CONFIG_RUST=y' "$ksrc/arch/arm64/configs/gki_defconfig" 2>/dev/null; then
+        info "No Rust in this line's GKI config - skipping the Rust toolchain"
+        return 0
+    fi
+
+    # e.g. RUSTC_VERSION=1.82.0.p2 (Android's patch level) -> 1.82.0
+    ver=$(sed -n 's/^RUSTC_VERSION=//p' "$ksrc/build.config.constants" 2>/dev/null | sed -E 's/\.p[0-9]+$//')
+    if [[ -z "$ver" ]]; then
+        warning "RUSTC_VERSION not found in build.config.constants - building without Rust"
+        return 0
+    fi
+
+    export PATH="$HOME/.cargo/bin:$PATH"
+    if ! command -v rustup >/dev/null 2>&1; then
+        command curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none \
+            || { warning "rustup install failed - building without Rust"; return 0; }
+    fi
+    rustup toolchain install "$ver" --profile minimal --component rust-src,rustfmt \
+        || { warning "Rust $ver install failed - building without Rust"; return 0; }
+    export RUSTUP_TOOLCHAIN="$ver"
+
+    if ! bindgen --version 2>/dev/null | grep -q " $bindgen_ver$"; then
+        cargo install bindgen-cli --version "$bindgen_ver" --locked \
+            || { warning "bindgen install failed - building without Rust"; return 0; }
+    fi
+
+    # bindgen loads libclang at runtime; use the compiler's own when it ships one
+    libdir="$(dirname "$(command -v clang)")/../lib"
+    if compgen -G "$libdir/libclang.so*" >/dev/null; then
+        export LIBCLANG_PATH="$(cd "$libdir" && pwd)"
+    fi
+
+    success "Rust toolchain: $(rustc --version | cut -d' ' -f1-2), $(bindgen --version), libclang from ${LIBCLANG_PATH:-the system}"
+}
+
 # Zero heap memory on free by default without CONFIG_INIT_ON_FREE_DEFAULT_ON.
 # That option declares the exported init_on_free static key as
 # static_key_true instead of GKI's static_key_false, which changes its KMI
