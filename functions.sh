@@ -657,6 +657,39 @@ hide_counted_by_from_genksyms() {
     fi
 }
 
+# Use the stack protector mode GKI's own build uses. arm64 switches to per-task
+# canaries (STACKPROTECTOR_PER_TASK) whenever the compiler supports
+# -mstack-protector-guard=sysreg. Google builds 5.10 with clang 12, which
+# doesn't, so GKI 5.10 has one global canary, __stack_chk_guard, that every
+# stack-protected vendor module links against. With this build's newer clang
+# the symbol disappears and those modules fail to load ("Unknown symbol"),
+# which force-loading can't help. When the GKI ABI lists __stack_chk_guard,
+# keep the global canary.
+keep_gki_stack_protector() {
+    local file="arch/arm64/Kconfig" abi=""
+    local candidate
+
+    for candidate in android/abi_gki_aarch64.xml android/abi_gki_aarch64.stg gki/aarch64/abi.stg; do
+        [[ -f "$candidate" ]] && { abi="$candidate"; break; }
+    done
+    if [[ -z "$abi" ]] || ! grep -qE "name: \"__stack_chk_guard\"|name='__stack_chk_guard'" "$abi"; then
+        info "GKI uses per-task stack canaries on this line - keeping them"
+        return 0
+    fi
+
+    if grep -q "NovaGKI: GKI's global stack canary" "$file"; then
+        success "Global stack canary already kept"
+        return 0
+    fi
+
+    sed -i "/^config STACKPROTECTOR_PER_TASK$/{n;s|^\tdef_bool y$|\t# NovaGKI: GKI's global stack canary (exports __stack_chk_guard)\n\tdef_bool n|}" "$file"
+    if grep -q "NovaGKI: GKI's global stack canary" "$file"; then
+        success "Global stack canary kept: __stack_chk_guard exported as in GKI"
+    else
+        warning "Could not keep the global stack canary in $file"
+    fi
+}
+
 # Zero heap memory on free by default without CONFIG_INIT_ON_FREE_DEFAULT_ON.
 # That option declares the exported init_on_free static key as
 # static_key_true instead of GKI's static_key_false, which changes its KMI
