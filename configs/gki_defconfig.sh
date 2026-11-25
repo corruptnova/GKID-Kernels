@@ -39,7 +39,16 @@ if [ "$KSU_SUSFS" = "true" ]; then
 fi
 
 echo "⚙️ Adding Compatibility GKI Networking and Filesystem configs"
-apply_config "$WORKDIR/configs/compat.config" "$DEFCONFIG"
+if grep -q '^CONFIG_IPV6_MROUTE=y' "$DEFCONFIG"; then
+  apply_config "$WORKDIR/configs/compat.config" "$DEFCONFIG"
+else
+  # IPv6 multicast routing adds fields to struct netns_ipv6 inside struct net,
+  # which changes the KMI CRCs of most networking, device, scheduler, cgroup
+  # and vendor hook exports. Keep it off where stock GKI does (5.10, 5.15).
+  echo "ℹ️ IPv6 multicast routing left off, as in this line's stock GKI (KMI)"
+  grep -vE '^CONFIG_IPV6_(MROUTE|MROUTE_MULTIPLE_TABLES|PIMSM_V2)=' \
+    "$WORKDIR/configs/compat.config" >> "$DEFCONFIG"
+fi
 
 echo "⚙️ Adding Universal Performance Tuning"
 apply_config "$WORKDIR/configs/custom.config" "$DEFCONFIG"
