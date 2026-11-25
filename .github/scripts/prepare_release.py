@@ -104,6 +104,9 @@ def variant_traits(build, inputs):
 	no_ds = build.get("No_DS") == "true" or "NoDS" in name or build.get("KSU") in ("no", "vnlto")
 	if "NoLTO" in name:
 		lto = "None"
+	elif build.get("BUILD_LTO"):
+		# What the build actually used: 6.12+ builds turn LTO off to keep GKI's KMI
+		lto = LTO_NAMES.get(build["BUILD_LTO"], build["BUILD_LTO"])
 	else:
 		lto = LTO_NAMES.get(inputs["lto"], inputs["lto"] or "Unknown")
 	return {

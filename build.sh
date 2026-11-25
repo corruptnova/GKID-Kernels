@@ -313,6 +313,8 @@ AK3_ZIP_NAME=${AK3_ZIP_NAME//VARIANT/$VARIANT}
 
 log "Applying configs..."
 source "$WORKDIR/configs/gki_defconfig.sh"
+# The LTO mode this build actually uses (gki_defconfig.sh can turn it off), for the release notes
+echo "BUILD_LTO=${LTO:-noneLTO}" >> $GITHUB_ENV
 
 if [ "${TODO:-kernel}" = "kernel" ]; then
   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
@@ -362,6 +364,10 @@ else
   export KBUILD_BUILD_TIMESTAMP=$(git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %d %T %z %Y')
 fi
 export KCFLAGS="-w"
+# 6.12+ compute symbol CRCs from DWARF (gendwarfksyms). Google's build runs it
+# in stable mode, which applies the ANDROID_KABI_* annotations; without it
+# nearly every CRC differs from GKI's. Unused on lines that use genksyms.
+export KBUILD_GENDWARFKSYMS_STABLE=1
 
 LINK_CACHE_PATH="/dev/shm/thinlto-cache"
 LINKER_SHIM="/tmp/clang-lto-linker"

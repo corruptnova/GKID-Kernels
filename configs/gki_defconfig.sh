@@ -75,6 +75,14 @@ if [ "$C_LTO" != "true" ]; then
   fi
 fi
 
+# 6.12+ GKI computes symbol CRCs from DWARF (gendwarfksyms), which needs
+# non-LTO objects: with LTO, Kconfig silently falls back to genksyms and every
+# CRC differs from GKI's. Stock GKI builds these lines without LTO.
+if grep -q '^CONFIG_GENDWARFKSYMS=y' "$DEFCONFIG" && [ "${LTO:-noneLTO}" != "noneLTO" ]; then
+  echo "ℹ️ LTO off: this line's GKI computes symbol CRCs with gendwarfksyms, which LTO can't use"
+  LTO="noneLTO"
+fi
+
 case "$LTO" in
   thinLTO)
     echo "🔥 ThinLTO optimizations enabled"

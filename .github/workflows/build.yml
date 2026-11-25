@@ -253,6 +253,7 @@ jobs:
           KSU_COMPAT=${{ matrix.KSU_COMPAT }}
           No_DS=${{ matrix.No_DS }}
           VARIANT=${{ env.VARIANT }}
+          BUILD_LTO=${{ env.BUILD_LTO }}
           KERNEL_VERSION=${{ env.KERNEL_VERSION }}
           ANDROID_RELEASE=${{ env.ANDROID_RELEASE }}
           KERNEL_SOURCE_REPO=${{ env.KERNEL_SOURCE_REPO }}
