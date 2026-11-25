@@ -93,7 +93,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **6.1 source:** built from AOSP's `android14-6.1` instead of GKID's [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1) device tree. 6.1 now gets the same patch set as the other lines and AOSP fixes as soon as they land, instead of waiting for the device tree to be merged by hand.
 - **Source branches:** 6.1 and 6.6 build from the main GKI branches (`android14-6.1`, `android15-6.6`), which Google builds GKI releases from and which get Android security fixes first. GKID used `android15-6.6-lts` for 6.6.
 - **AutoFDO:** uses the sample profile Google ships in the GKI tree (6.6 and 6.12).
-- **KMI check:** after each build, compares the kernel's exported symbols with Google's GKI ABI on every line. It reports which symbols that phone makers' modules use have changed or gone missing, per vendor symbol list, and ignores symbols exported by Android's own GKI modules. The full list is saved as `kmi-report-<line>-<variant>.txt` in the build artifacts. By default this only warns.
+- **KMI check:** after each build, compares the kernel's exported symbols with Google's GKI ABI on every line. It reports which symbols that phone makers' modules use have changed or gone missing, per vendor symbol list, and ignores symbols exported by Android's own GKI modules. The full list is saved as `kmi-report-<line>-<variant>.txt` in the build artifacts. On 6.1 and 6.6, whose KMI matches stock GKI, a mismatch fails the build; on the other lines it only warns for now.
 - **Stock-style kernel name (optional, `STOCK_NAME`):**
   - Reports a stock-style release (for example `-android15-8-g…`) instead of `-NovaGKI-rN-…`.
   - Can copy a stock kernel's builder, compiler and build date.
@@ -192,7 +192,7 @@ Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** (
 |---|---|
 | `FINASU_REF` | FinaSU branch or tag to build (default `dev`) |
 | `FINASU_CERT_SIZE`, `FINASU_CERT_HASH` | Manager certificate to trust; skips the APK download |
-| `KMI_STRICT=true` | Fails the build when a symbol vendor modules use has a changed CRC or is missing |
+| `KMI_STRICT=true` or `false` | Whether a changed or missing symbol that vendor modules use fails the build. Default: on for 6.1 and 6.6, off for the other lines |
 
 `build.sh` also supports the Vanilla, KernelSU, Compat and NoDS variants. To build those, add their names to `VARIANTS` and turn on the matching `BUILD_*` flag in the workflow's matrix step.
 

@@ -595,7 +595,16 @@ set +eo pipefail
 # instead of finding out on a device. The full list goes into the artifacts.
 KMI_REPORT="$RELEASE_DIR/kmi-report-${KERNEL_VERSION}-${VARIANT}.txt"
 KMI_SUMMARY="$WORKDIR/kmi-summary.txt"
-echo "::group::[*] KMI symbol CRC check"
+# Lines whose KMI matches stock GKI fail the build on a regression; the rest
+# only warn until they match too. Set KMI_STRICT=true or false to override.
+KMI_STRICT_LINES="6.1 6.6"
+if [ -z "${KMI_STRICT:-}" ]; then
+  case " $KMI_STRICT_LINES " in
+    *" $KERNEL_VERSION "*) KMI_STRICT=true ;;
+    *) KMI_STRICT=false ;;
+  esac
+fi
+echo "::group::[*] KMI symbol CRC check (KMI_STRICT=$KMI_STRICT)"
 python3 "$KMI_CHECK" --ksrc "$KSRC" --symvers "$OUTDIR/vmlinux.symvers" \
   --module-symvers "$OUTDIR/Module.symvers" \
   --protected-exports "$KMI_REF_DIR/abi_gki_protected_exports_aarch64" \
@@ -603,8 +612,8 @@ python3 "$KMI_CHECK" --ksrc "$KSRC" --symvers "$OUTDIR/vmlinux.symvers" \
 KMI_RC=$?
 echo "::endgroup::"
 if [ $KMI_RC -eq 1 ]; then
-  if [ "${KMI_STRICT:-false}" = "true" ]; then
-    error "KMI check failed (KMI_STRICT=true): $(cat "$KMI_SUMMARY")"
+  if [ "$KMI_STRICT" = "true" ]; then
+    echo "::error::KMI ${KERNEL_VERSION} ${VARIANT}: $(cat "$KMI_SUMMARY"). This line's KMI matched stock GKI, so the build stops (KMI_STRICT=false overrides). Details: $(basename "$KMI_REPORT") in the build artifacts"
     exit 1
   fi
   echo "::warning::KMI ${KERNEL_VERSION} ${VARIANT}: $(cat "$KMI_SUMMARY"). Details: $(basename "$KMI_REPORT") in the build artifacts"
