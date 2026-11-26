@@ -39,7 +39,16 @@ if [ "$KSU_SUSFS" = "true" ]; then
 fi
 
 echo "⚙️ Adding Compatibility GKI Networking and Filesystem configs"
-apply_config "$WORKDIR/configs/compat.config" "$DEFCONFIG"
+if grep -q '^CONFIG_IPV6_MROUTE=y' "$DEFCONFIG"; then
+  apply_config "$WORKDIR/configs/compat.config" "$DEFCONFIG"
+else
+  # IPv6 multicast routing adds fields to struct netns_ipv6 inside struct net,
+  # which changes the KMI CRCs of most networking, device, scheduler, cgroup
+  # and vendor hook exports. Keep it off where stock GKI does (5.10, 5.15).
+  echo "ℹ️ IPv6 multicast routing left off, as in this line's stock GKI (KMI)"
+  grep -vE '^CONFIG_IPV6_(MROUTE|MROUTE_MULTIPLE_TABLES|PIMSM_V2)=' \
+    "$WORKDIR/configs/compat.config" >> "$DEFCONFIG"
+fi
 
 echo "⚙️ Adding Universal Performance Tuning"
 apply_config "$WORKDIR/configs/custom.config" "$DEFCONFIG"
@@ -64,6 +73,14 @@ if [ "$C_LTO" != "true" ]; then
   if [ "$KSU_COMPAT" = "true" ] || [ "$KSU" = "vnlto" ]; then
     LTO="noneLTO"
   fi
+fi
+
+# 6.12+ GKI computes symbol CRCs from DWARF (gendwarfksyms), which needs
+# non-LTO objects: with LTO, Kconfig silently falls back to genksyms and every
+# CRC differs from GKI's. Stock GKI builds these lines without LTO.
+if grep -q '^CONFIG_GENDWARFKSYMS=y' "$DEFCONFIG" && [ "${LTO:-noneLTO}" != "noneLTO" ]; then
+  echo "ℹ️ LTO off: this line's GKI computes symbol CRCs with gendwarfksyms, which LTO can't use"
+  LTO="noneLTO"
 fi
 
 case "$LTO" in

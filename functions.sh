@@ -657,6 +657,182 @@ hide_counted_by_from_genksyms() {
     fi
 }
 
+# Use the stack protector mode GKI's own build uses. arm64 switches to per-task
+# canaries (STACKPROTECTOR_PER_TASK) whenever the compiler supports
+# -mstack-protector-guard=sysreg. Google builds 5.10 with clang 12, which
+# doesn't, so GKI 5.10 has one global canary, __stack_chk_guard, that every
+# stack-protected vendor module links against. With this build's newer clang
+# the symbol disappears and those modules fail to load ("Unknown symbol"),
+# which force-loading can't help. When the GKI ABI lists __stack_chk_guard,
+# keep the global canary.
+keep_gki_stack_protector() {
+    local file="arch/arm64/Kconfig" abi=""
+    local candidate
+
+    for candidate in android/abi_gki_aarch64.xml android/abi_gki_aarch64.stg gki/aarch64/abi.stg; do
+        [[ -f "$candidate" ]] && { abi="$candidate"; break; }
+    done
+    if [[ -z "$abi" ]] || ! grep -qE "name: \"__stack_chk_guard\"|name='__stack_chk_guard'" "$abi"; then
+        info "GKI uses per-task stack canaries on this line - keeping them"
+        return 0
+    fi
+
+    if grep -q "NovaGKI: GKI's global stack canary" "$file"; then
+        success "Global stack canary already kept"
+        return 0
+    fi
+
+    sed -i "/^config STACKPROTECTOR_PER_TASK$/{n;s|^\tdef_bool y$|\t# NovaGKI: GKI's global stack canary (exports __stack_chk_guard)\n\tdef_bool n|}" "$file"
+    if grep -q "NovaGKI: GKI's global stack canary" "$file"; then
+        success "Global stack canary kept: __stack_chk_guard exported as in GKI"
+    else
+        warning "Could not keep the global stack canary in $file"
+    fi
+}
+
+# DroidSpaces and NetHunter turn on System V IPC, and with it IPC namespaces
+# (CONFIG_IPC_NS). Rust binder's binderfs (rust_binder.ko, a GKI module on
+# 6.12+) then calls put_ipc_ns() and compares with &init_ipc_ns, which the
+# kernel doesn't export (the C binderfs is built in), so modpost stops the
+# build. Export both, GPL-only. Stock GKI has no System V IPC, so neither file
+# is built there; and new exports don't change any existing symbol's CRC.
+export_ipc_ns_for_rust_binder() {
+    local file
+
+    if [[ ! -f drivers/android/binder/rust_binderfs.c ]]; then
+        info "No Rust binderfs on this line - IPC namespace exports not needed"
+        return 0
+    fi
+
+    for file in ipc/msgutil.c ipc/namespace.c; do
+        grep -q "NovaGKI: for rust_binder.ko" "$file" && continue
+        sed -i '/^#include <linux\/ipc_namespace.h>$/a #include <linux/export.h>' "$file"
+    done
+    if ! grep -q "NovaGKI: for rust_binder.ko" ipc/msgutil.c; then
+        sed -i '/^struct ipc_namespace init_ipc_ns = {$/,/^};$/{/^};$/a EXPORT_SYMBOL_GPL(init_ipc_ns); /* NovaGKI: for rust_binder.ko with IPC namespaces */
+}' ipc/msgutil.c
+    fi
+    if ! grep -q "NovaGKI: for rust_binder.ko" ipc/namespace.c; then
+        sed -i '/^void put_ipc_ns(struct ipc_namespace \*ns)$/,/^}$/{/^}$/a EXPORT_SYMBOL_GPL(put_ipc_ns); /* NovaGKI: for rust_binder.ko with IPC namespaces */
+}' ipc/namespace.c
+    fi
+
+    if grep -q "^EXPORT_SYMBOL_GPL(init_ipc_ns);" ipc/msgutil.c && grep -q "^EXPORT_SYMBOL_GPL(put_ipc_ns);" ipc/namespace.c; then
+        success "init_ipc_ns and put_ipc_ns exported for rust_binder.ko"
+    else
+        warning "Could not export init_ipc_ns/put_ipc_ns: rust_binder.ko may fail modpost with System V IPC on"
+    fi
+}
+
+# Google's prebuilt clang releases (AOSP platform/prebuilts/clang/host/linux-x86),
+# pinned to a commit so versions later pruned from the branch stay downloadable
+GKI_CLANG_REPO="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+GKI_CLANG_COMMIT="70a12c4fe88940ab2b0e6d763492dffa2f07e15a"
+
+# Lines whose stock config computes symbol CRCs from DWARF (gendwarfksyms, 6.12+)
+uses_gendwarfksyms() {
+    grep -q '^CONFIG_GENDWARFKSYMS=y' "$1/arch/arm64/configs/gki_defconfig" 2>/dev/null
+}
+
+# Build gendwarfksyms lines with the clang Google builds GKI with. Their
+# symbol CRCs hash the type strings gendwarfksyms prints from the compiler's
+# DWARF, and those depend on how the compiler lays the DWARF out, not just on
+# the types: whether gendwarfksyms puts " ," between two function-pointer
+# parameters depends on what it processed just before. A newer clang (Neutron,
+# clang 23) lays it out differently, which changed the CRCs of
+# net_ns_type_operations and the rproc_mem_entry exports from GKI's although
+# the types are the same. Installs the CLANG_VERSION pinned in
+# build.config.constants (e.g. r536225) into $2.
+setup_gki_clang() {
+    local ksrc="$1" dest="$2" ver archive
+
+    ver=$(sed -n 's/^CLANG_VERSION=//p' "$ksrc/build.config.constants" 2>/dev/null)
+    if [[ -z "$ver" ]]; then
+        error "CLANG_VERSION not found in build.config.constants"
+        return 1
+    fi
+
+    if [[ -x "$dest/bin/clang" ]] && "$dest/bin/clang" --version | grep -q "based on $ver)"; then
+        success "Google clang $ver already installed"
+        return 0
+    fi
+
+    log "Downloading Google's clang-$ver (the compiler GKI is built with)"
+    archive="$(dirname "$dest")/clang-$ver.tar.gz"
+    rm -rf "$dest" && mkdir -p "$dest"
+    # A transfer stalled below 100 KB/s for 2 minutes fails (and is retried)
+    # instead of hanging until the job times out
+    curl -fsSL --speed-limit 102400 --speed-time 120 -o "$archive" \
+        "$GKI_CLANG_REPO/+archive/$GKI_CLANG_COMMIT/clang-$ver.tar.gz" || {
+        error "Failed to download clang-$ver from $GKI_CLANG_REPO at $GKI_CLANG_COMMIT (if this line now pins a newer clang, update GKI_CLANG_COMMIT)"
+        rm -f "$archive"
+        return 1
+    }
+    # The Android userspace runtimes and Python are ~1.2 GB the kernel doesn't use
+    tar -xzf "$archive" -C "$dest" --anchored \
+        --exclude=android_libc++ --exclude=runtimes_ndk_cxx --exclude=musl --exclude=python3 || {
+        error "Failed to extract clang-$ver"
+        # A partial install could pass the "already installed" check next time
+        rm -rf "$archive" "$dest"
+        return 1
+    }
+    rm -f "$archive"
+
+    if ! "$dest/bin/clang" --version | grep -q "based on $ver)"; then
+        error "clang-$ver archive doesn't contain clang $ver"
+        return 1
+    fi
+    success "Google clang: $("$dest/bin/clang" --version | head -n1)"
+}
+
+# 6.12+ GKI builds parts of the kernel in Rust: ashmem (CONFIG_ASHMEM depends
+# on RUST), the Rust binder module and its vendor hooks. Without a Rust
+# toolchain Kconfig quietly drops CONFIG_RUST, so those go missing: no
+# /dev/ashmem, and vendor modules using RUST_BINDER_LAYOUT, the Rust binder
+# hooks or the ashmem exports can't load. Install the rustc version the branch
+# pins in build.config.constants, with rust-src (the kernel builds core/alloc)
+# and bindgen (generates the C bindings).
+setup_rust_toolchain() {
+    local ksrc="$1" bindgen_ver="0.69.5" ver libdir
+
+    if ! grep -q '^CONFIG_RUST=y' "$ksrc/arch/arm64/configs/gki_defconfig" 2>/dev/null; then
+        info "No Rust in this line's GKI config - skipping the Rust toolchain"
+        return 0
+    fi
+
+    # e.g. RUSTC_VERSION=1.82.0.p2 (Android's patch level) -> 1.82.0
+    ver=$(sed -n 's/^RUSTC_VERSION=//p' "$ksrc/build.config.constants" 2>/dev/null | sed -E 's/\.p[0-9]+$//')
+    if [[ -z "$ver" ]]; then
+        warning "RUSTC_VERSION not found in build.config.constants - building without Rust"
+        return 0
+    fi
+
+    # Keep the toolchain inside the work dir: build.sh's disk cleanup before the
+    # kernel build deletes ~/.cargo and ~/.rustup, and Kconfig re-checks Rust then
+    export CARGO_HOME="${WORKDIR:-$PWD}/.rust/cargo" RUSTUP_HOME="${WORKDIR:-$PWD}/.rust/rustup"
+    export PATH="$CARGO_HOME/bin:$PATH"
+    if [[ ! -x "$CARGO_HOME/bin/rustup" ]]; then
+        command curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain none \
+            || { warning "rustup install failed - building without Rust"; return 0; }
+    fi
+    rustup toolchain install "$ver" --profile minimal --component rust-src,rustfmt \
+        || { warning "Rust $ver install failed - building without Rust"; return 0; }
+    export RUSTUP_TOOLCHAIN="$ver"
+
+    if ! bindgen --version 2>/dev/null | grep -q " $bindgen_ver$"; then
+        cargo install bindgen-cli --version "$bindgen_ver" --locked \
+            || { warning "bindgen install failed - building without Rust"; return 0; }
+    fi
+
+    # bindgen loads libclang at runtime; use the compiler's own when it ships one
+    libdir="$(dirname "$(command -v clang)")/../lib"
+    if compgen -G "$libdir/libclang.so*" >/dev/null; then
+        export LIBCLANG_PATH="$(cd "$libdir" && pwd)"
+    fi
+
+    success "Rust toolchain: $(rustc --version | cut -d' ' -f1-2), $(bindgen --version), libclang from ${LIBCLANG_PATH:-the system}"
+}
+
 # Zero heap memory on free by default without CONFIG_INIT_ON_FREE_DEFAULT_ON.
 # That option declares the exported init_on_free static key as
 # static_key_true instead of GKI's static_key_false, which changes its KMI

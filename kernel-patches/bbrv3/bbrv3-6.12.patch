@@ -271,7 +271,7 @@ index 4c94211..51b6641 100644
  static inline s64 tcp_rto_delta_us(const struct sock *sk)
  {
 diff --git a/include/uapi/linux/inet_diag.h b/include/uapi/linux/inet_diag.h
-index 86bb2e8..91a96ce 100644
+index 86bb2e8..16454e4 100644
 --- a/include/uapi/linux/inet_diag.h
 +++ b/include/uapi/linux/inet_diag.h
 @@ -229,6 +229,32 @@ struct tcp_bbr_info {
@@ -307,6 +307,13 @@ index 86bb2e8..91a96ce 100644
  };
  
  union tcp_cc_info {
+@@ -236,4 +262,6 @@ union tcp_cc_info {
+ 	struct tcp_dctcp_info	dctcp;
+ 	struct tcp_bbr_info	bbr;
+ };
++/* Grows with tcp_bbr_info; keep GKI's size for symbol versioning */
++ANDROID_KABI_BYTE_SIZE(tcp_cc_info, 20);
+ #endif /* _UAPI_INET_DIAG_H_ */
 diff --git a/include/uapi/linux/rtnetlink.h b/include/uapi/linux/rtnetlink.h
 index db7254d..721253d 100644
 --- a/include/uapi/linux/rtnetlink.h

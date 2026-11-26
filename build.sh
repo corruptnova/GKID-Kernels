@@ -102,17 +102,28 @@ generate_gh_changelog "Baka-SU/BakaSU" "main" 5 "$RELEASE_DIR/BakaSU_changelog.t
 generate_gh_changelog "$FINASU_REPO" "$FINASU_REF" 5 "$RELEASE_DIR/FinaSU_changelog.txt"
 
 echo "::group::[*] Downloading Clang"
-CLANG_BIN="$WORKDIR/neutron-clang/bin"
-mkdir -p "$WORKDIR/neutron-clang"
-cd "$WORKDIR/neutron-clang"
-bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") -S
-cd $OLDPWD
+if uses_gendwarfksyms "$KSRC"; then
+  # Symbol CRCs come from the compiler's DWARF here: use GKI's own clang so
+  # they match Google's (see setup_gki_clang)
+  CLANG_BIN="$WORKDIR/gki-clang/bin"
+  setup_gki_clang "$KSRC" "$WORKDIR/gki-clang" || exit 1
+else
+  CLANG_BIN="$WORKDIR/neutron-clang/bin"
+  mkdir -p "$WORKDIR/neutron-clang"
+  cd "$WORKDIR/neutron-clang"
+  bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") -S
+  cd $OLDPWD
+fi
 if [ ! -d "$CLANG_BIN" ]; then
     error "Clang not found in ${CLANG_BIN}."
     exit 1
 fi
 
 export PATH="${CLANG_BIN}:$PATH"
+echo "::endgroup::"
+
+echo "::group::[*] Rust toolchain"
+setup_rust_toolchain "$KSRC"
 echo "::endgroup::"
 
 export CCACHE_DIR="$HOME/.ccache"
@@ -146,6 +157,8 @@ apply_s2idle_wake_gate
 apply_extract_cert_key_pass_patch
 keep_gki_ll_max_header
 hide_counted_by_from_genksyms
+keep_gki_stack_protector
+export_ipc_ns_for_rust_binder
 # Part of the hardening set (configs/hardening.config)
 if [ "${HARDENING:-true}" = "true" ]; then
   default_init_on_free_on
@@ -312,6 +325,8 @@ AK3_ZIP_NAME=${AK3_ZIP_NAME//VARIANT/$VARIANT}
 
 log "Applying configs..."
 source "$WORKDIR/configs/gki_defconfig.sh"
+# The LTO mode this build actually uses (gki_defconfig.sh can turn it off), for the release notes
+echo "BUILD_LTO=${LTO:-noneLTO}" >> $GITHUB_ENV
 
 if [ "${TODO:-kernel}" = "kernel" ]; then
   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
@@ -361,6 +376,10 @@ else
   export KBUILD_BUILD_TIMESTAMP=$(git -C $KSRC log -1 --format=%cd --date=format-local:'%a %b %d %T %z %Y')
 fi
 export KCFLAGS="-w"
+# 6.12+ compute symbol CRCs from DWARF (gendwarfksyms). Google's build runs it
+# in stable mode, which applies the ANDROID_KABI_* annotations; without it
+# nearly every CRC differs from GKI's. Unused on lines that use genksyms.
+export KBUILD_GENDWARFKSYMS_STABLE=1
 
 LINK_CACHE_PATH="/dev/shm/thinlto-cache"
 LINKER_SHIM="/tmp/clang-lto-linker"
@@ -589,21 +608,46 @@ make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++" CONFIG_FAKE_DISABLE=
 echo "::endgroup::"
 set +eo pipefail
 
+# GKI wants Rust on this line but the kernel was built without it (Kconfig
+# re-checks the toolchain on every build): say why instead of silently shipping
+# without ashmem and the Rust binder exports
+if grep -q '^CONFIG_RUST=y' "$KSRC/arch/arm64/configs/gki_defconfig" && ! grep -q '^CONFIG_RUST=y' "$OUTDIR/.config"; then
+  echo "::warning::${KERNEL_VERSION}: built without Rust (CONFIG_RUST off): no ashmem, and the Rust binder exports are missing. See 'make rustavailable' in the log"
+  make ${MAKE_ARGS[@]} rustavailable || true
+fi
+
 # Vendor modules with mismatched symbol CRCs are force-loaded (see
 # 0003-kernel-module.c patch), so report which symbols they use changed here
 # instead of finding out on a device. The full list goes into the artifacts.
 KMI_REPORT="$RELEASE_DIR/kmi-report-${KERNEL_VERSION}-${VARIANT}.txt"
 KMI_SUMMARY="$WORKDIR/kmi-summary.txt"
-echo "::group::[*] KMI symbol CRC check"
+# Lines whose KMI matches stock GKI fail the build on a regression (every line
+# since runs 29 and 31); a line left out only warns. Set KMI_STRICT=true or
+# false to override.
+KMI_STRICT_LINES="5.10 5.15 6.1 6.6 6.12"
+if [ -z "${KMI_STRICT:-}" ]; then
+  case " $KMI_STRICT_LINES " in
+    *" $KERNEL_VERSION "*) KMI_STRICT=true ;;
+    *) KMI_STRICT=false ;;
+  esac
+fi
+echo "::group::[*] KMI symbol CRC check (KMI_STRICT=$KMI_STRICT)"
 python3 "$KMI_CHECK" --ksrc "$KSRC" --symvers "$OUTDIR/vmlinux.symvers" \
   --module-symvers "$OUTDIR/Module.symvers" \
   --protected-exports "$KMI_REF_DIR/abi_gki_protected_exports_aarch64" \
   --report "$KMI_REPORT" --summary-file "$KMI_SUMMARY"
 KMI_RC=$?
 echo "::endgroup::"
+# gendwarfksyms CRCs come from the compiler's DWARF, not just the source:
+# show where the changed ones come from (debug info or the tool itself)
+if [ $KMI_RC -eq 1 ] && grep -q '^CONFIG_GENDWARFKSYMS=y' "$OUTDIR/.config"; then
+  echo "::group::[*] KMI: changed gendwarfksyms CRCs explained"
+  python3 "$WORKDIR/py/kmi-explain.py" --ksrc "$KSRC" --outdir "$OUTDIR" --report "$KMI_REPORT"
+  echo "::endgroup::"
+fi
 if [ $KMI_RC -eq 1 ]; then
-  if [ "${KMI_STRICT:-false}" = "true" ]; then
-    error "KMI check failed (KMI_STRICT=true): $(cat "$KMI_SUMMARY")"
+  if [ "$KMI_STRICT" = "true" ]; then
+    echo "::error::KMI ${KERNEL_VERSION} ${VARIANT}: $(cat "$KMI_SUMMARY"). This line's KMI matched stock GKI, so the build stops (KMI_STRICT=false overrides). Details: $(basename "$KMI_REPORT") in the build artifacts"
     exit 1
   fi
   echo "::warning::KMI ${KERNEL_VERSION} ${VARIANT}: $(cat "$KMI_SUMMARY"). Details: $(basename "$KMI_REPORT") in the build artifacts"
