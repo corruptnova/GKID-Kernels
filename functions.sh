@@ -726,15 +726,20 @@ setup_gki_clang() {
     log "Downloading Google's clang-$ver (the compiler GKI is built with)"
     archive="$(dirname "$dest")/clang-$ver.tar.gz"
     rm -rf "$dest" && mkdir -p "$dest"
-    curl -fsSL -o "$archive" "$GKI_CLANG_REPO/+archive/$GKI_CLANG_COMMIT/clang-$ver.tar.gz" || {
-        error "Failed to download clang-$ver from $GKI_CLANG_REPO"
+    # A transfer stalled below 100 KB/s for 2 minutes fails (and is retried)
+    # instead of hanging until the job times out
+    curl -fsSL --speed-limit 102400 --speed-time 120 -o "$archive" \
+        "$GKI_CLANG_REPO/+archive/$GKI_CLANG_COMMIT/clang-$ver.tar.gz" || {
+        error "Failed to download clang-$ver from $GKI_CLANG_REPO at $GKI_CLANG_COMMIT (if this line now pins a newer clang, update GKI_CLANG_COMMIT)"
+        rm -f "$archive"
         return 1
     }
     # The Android userspace runtimes and Python are ~1.2 GB the kernel doesn't use
     tar -xzf "$archive" -C "$dest" --anchored \
         --exclude=android_libc++ --exclude=runtimes_ndk_cxx --exclude=musl --exclude=python3 || {
         error "Failed to extract clang-$ver"
-        rm -f "$archive"
+        # A partial install could pass the "already installed" check next time
+        rm -rf "$archive" "$dest"
         return 1
     }
     rm -f "$archive"
