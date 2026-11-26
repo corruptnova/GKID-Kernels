@@ -445,13 +445,6 @@ echo "::group::[*] Generating config"
 make ${MAKE_ARGS[@]} "$KERNEL_DEFCONFIG"
 echo "::endgroup::"
 
-# GKI wants Rust on this line but Kconfig dropped it: say why instead of
-# silently building without ashmem and the Rust binder exports
-if grep -q '^CONFIG_RUST=y' arch/arm64/configs/gki_defconfig && ! grep -q '^CONFIG_RUST=y' "$OUTDIR/.config"; then
-  echo "::warning::${KERNEL_VERSION}: Rust is unavailable, so CONFIG_RUST is off: no ashmem, and the Rust binder exports are missing (see 'make rustavailable' in the log)"
-  make ${MAKE_ARGS[@]} rustavailable || true
-fi
-
 # Root/hiding options to report as "not set" in /proc/config.gz (fake_config.patch)
 FAKE_DISABLE_CONFIGS="$(grep -oE '^CONFIG_(KSU|KPM|NOMOUNT|BBG)(_[A-Za-z0-9_]*)?=' "$OUTDIR/.config" | tr -d '=' | tr '\n' ' ' | sed 's/ $//')"
 if [ -n "$FAKE_DISABLE_CONFIGS" ]; then
@@ -606,6 +599,14 @@ echo "::group::[*] Building kernel"
 make ${MAKE_ARGS[@]} CC="ccache clang" CXX="ccache clang++" CONFIG_FAKE_DISABLE="$FAKE_DISABLE_CONFIGS"
 echo "::endgroup::"
 set +eo pipefail
+
+# GKI wants Rust on this line but the kernel was built without it (Kconfig
+# re-checks the toolchain on every build): say why instead of silently shipping
+# without ashmem and the Rust binder exports
+if grep -q '^CONFIG_RUST=y' "$KSRC/arch/arm64/configs/gki_defconfig" && ! grep -q '^CONFIG_RUST=y' "$OUTDIR/.config"; then
+  echo "::warning::${KERNEL_VERSION}: built without Rust (CONFIG_RUST off): no ashmem, and the Rust binder exports are missing. See 'make rustavailable' in the log"
+  make ${MAKE_ARGS[@]} rustavailable || true
+fi
 
 # Vendor modules with mismatched symbol CRCs are force-loaded (see
 # 0003-kernel-module.c patch), so report which symbols they use changed here

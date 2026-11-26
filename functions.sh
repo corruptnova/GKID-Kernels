@@ -712,9 +712,12 @@ setup_rust_toolchain() {
         return 0
     fi
 
-    export PATH="$HOME/.cargo/bin:$PATH"
-    if ! command -v rustup >/dev/null 2>&1; then
-        command curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none \
+    # Keep the toolchain inside the work dir: build.sh's disk cleanup before the
+    # kernel build deletes ~/.cargo and ~/.rustup, and Kconfig re-checks Rust then
+    export CARGO_HOME="${WORKDIR:-$PWD}/.rust/cargo" RUSTUP_HOME="${WORKDIR:-$PWD}/.rust/rustup"
+    export PATH="$CARGO_HOME/bin:$PATH"
+    if [[ ! -x "$CARGO_HOME/bin/rustup" ]]; then
+        command curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain none \
             || { warning "rustup install failed - building without Rust"; return 0; }
     fi
     rustup toolchain install "$ver" --profile minimal --component rust-src,rustfmt \
