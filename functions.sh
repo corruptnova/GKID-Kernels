@@ -690,6 +690,40 @@ keep_gki_stack_protector() {
     fi
 }
 
+# DroidSpaces and NetHunter turn on System V IPC, and with it IPC namespaces
+# (CONFIG_IPC_NS). Rust binder's binderfs (rust_binder.ko, a GKI module on
+# 6.12+) then calls put_ipc_ns() and compares with &init_ipc_ns, which the
+# kernel doesn't export (the C binderfs is built in), so modpost stops the
+# build. Export both, GPL-only. Stock GKI has no System V IPC, so neither file
+# is built there; and new exports don't change any existing symbol's CRC.
+export_ipc_ns_for_rust_binder() {
+    local file
+
+    if [[ ! -f drivers/android/binder/rust_binderfs.c ]]; then
+        info "No Rust binderfs on this line - IPC namespace exports not needed"
+        return 0
+    fi
+
+    for file in ipc/msgutil.c ipc/namespace.c; do
+        grep -q "NovaGKI: for rust_binder.ko" "$file" && continue
+        sed -i '/^#include <linux\/ipc_namespace.h>$/a #include <linux/export.h>' "$file"
+    done
+    if ! grep -q "NovaGKI: for rust_binder.ko" ipc/msgutil.c; then
+        sed -i '/^struct ipc_namespace init_ipc_ns = {$/,/^};$/{/^};$/a EXPORT_SYMBOL_GPL(init_ipc_ns); /* NovaGKI: for rust_binder.ko with IPC namespaces */
+}' ipc/msgutil.c
+    fi
+    if ! grep -q "NovaGKI: for rust_binder.ko" ipc/namespace.c; then
+        sed -i '/^void put_ipc_ns(struct ipc_namespace \*ns)$/,/^}$/{/^}$/a EXPORT_SYMBOL_GPL(put_ipc_ns); /* NovaGKI: for rust_binder.ko with IPC namespaces */
+}' ipc/namespace.c
+    fi
+
+    if grep -q "^EXPORT_SYMBOL_GPL(init_ipc_ns);" ipc/msgutil.c && grep -q "^EXPORT_SYMBOL_GPL(put_ipc_ns);" ipc/namespace.c; then
+        success "init_ipc_ns and put_ipc_ns exported for rust_binder.ko"
+    else
+        warning "Could not export init_ipc_ns/put_ipc_ns: rust_binder.ko may fail modpost with System V IPC on"
+    fi
+}
+
 # Google's prebuilt clang releases (AOSP platform/prebuilts/clang/host/linux-x86),
 # pinned to a commit so versions later pruned from the branch stay downloadable
 GKI_CLANG_REPO="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
