@@ -629,6 +629,13 @@ python3 "$KMI_CHECK" --ksrc "$KSRC" --symvers "$OUTDIR/vmlinux.symvers" \
   --report "$KMI_REPORT" --summary-file "$KMI_SUMMARY"
 KMI_RC=$?
 echo "::endgroup::"
+# gendwarfksyms CRCs come from the compiler's DWARF, not just the source:
+# show where the changed ones come from (debug info or the tool itself)
+if [ $KMI_RC -eq 1 ] && grep -q '^CONFIG_GENDWARFKSYMS=y' "$OUTDIR/.config"; then
+  echo "::group::[*] KMI: changed gendwarfksyms CRCs explained"
+  python3 "$WORKDIR/py/kmi-explain.py" --ksrc "$KSRC" --outdir "$OUTDIR" --report "$KMI_REPORT"
+  echo "::endgroup::"
+fi
 if [ $KMI_RC -eq 1 ]; then
   if [ "$KMI_STRICT" = "true" ]; then
     echo "::error::KMI ${KERNEL_VERSION} ${VARIANT}: $(cat "$KMI_SUMMARY"). This line's KMI matched stock GKI, so the build stops (KMI_STRICT=false overrides). Details: $(basename "$KMI_REPORT") in the build artifacts"
