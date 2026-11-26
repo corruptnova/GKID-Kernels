@@ -690,6 +690,62 @@ keep_gki_stack_protector() {
     fi
 }
 
+# Google's prebuilt clang releases (AOSP platform/prebuilts/clang/host/linux-x86),
+# pinned to a commit so versions later pruned from the branch stay downloadable
+GKI_CLANG_REPO="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+GKI_CLANG_COMMIT="70a12c4fe88940ab2b0e6d763492dffa2f07e15a"
+
+# Lines whose stock config computes symbol CRCs from DWARF (gendwarfksyms, 6.12+)
+uses_gendwarfksyms() {
+    grep -q '^CONFIG_GENDWARFKSYMS=y' "$1/arch/arm64/configs/gki_defconfig" 2>/dev/null
+}
+
+# Build gendwarfksyms lines with the clang Google builds GKI with. Their
+# symbol CRCs hash the type strings gendwarfksyms prints from the compiler's
+# DWARF, and those depend on how the compiler lays the DWARF out, not just on
+# the types: whether gendwarfksyms puts " ," between two function-pointer
+# parameters depends on what it processed just before. A newer clang (Neutron,
+# clang 23) lays it out differently, which changed the CRCs of
+# net_ns_type_operations and the rproc_mem_entry exports from GKI's although
+# the types are the same. Installs the CLANG_VERSION pinned in
+# build.config.constants (e.g. r536225) into $2.
+setup_gki_clang() {
+    local ksrc="$1" dest="$2" ver archive
+
+    ver=$(sed -n 's/^CLANG_VERSION=//p' "$ksrc/build.config.constants" 2>/dev/null)
+    if [[ -z "$ver" ]]; then
+        error "CLANG_VERSION not found in build.config.constants"
+        return 1
+    fi
+
+    if [[ -x "$dest/bin/clang" ]] && "$dest/bin/clang" --version | grep -q "based on $ver)"; then
+        success "Google clang $ver already installed"
+        return 0
+    fi
+
+    log "Downloading Google's clang-$ver (the compiler GKI is built with)"
+    archive="$(dirname "$dest")/clang-$ver.tar.gz"
+    rm -rf "$dest" && mkdir -p "$dest"
+    curl -fsSL -o "$archive" "$GKI_CLANG_REPO/+archive/$GKI_CLANG_COMMIT/clang-$ver.tar.gz" || {
+        error "Failed to download clang-$ver from $GKI_CLANG_REPO"
+        return 1
+    }
+    # The Android userspace runtimes and Python are ~1.2 GB the kernel doesn't use
+    tar -xzf "$archive" -C "$dest" --anchored \
+        --exclude=android_libc++ --exclude=runtimes_ndk_cxx --exclude=musl --exclude=python3 || {
+        error "Failed to extract clang-$ver"
+        rm -f "$archive"
+        return 1
+    }
+    rm -f "$archive"
+
+    if ! "$dest/bin/clang" --version | grep -q "based on $ver)"; then
+        error "clang-$ver archive doesn't contain clang $ver"
+        return 1
+    fi
+    success "Google clang: $("$dest/bin/clang" --version | head -n1)"
+}
+
 # 6.12+ GKI builds parts of the kernel in Rust: ashmem (CONFIG_ASHMEM depends
 # on RUST), the Rust binder module and its vendor hooks. Without a Rust
 # toolchain Kconfig quietly drops CONFIG_RUST, so those go missing: no

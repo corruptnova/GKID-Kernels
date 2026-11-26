@@ -102,11 +102,18 @@ generate_gh_changelog "Baka-SU/BakaSU" "main" 5 "$RELEASE_DIR/BakaSU_changelog.t
 generate_gh_changelog "$FINASU_REPO" "$FINASU_REF" 5 "$RELEASE_DIR/FinaSU_changelog.txt"
 
 echo "::group::[*] Downloading Clang"
-CLANG_BIN="$WORKDIR/neutron-clang/bin"
-mkdir -p "$WORKDIR/neutron-clang"
-cd "$WORKDIR/neutron-clang"
-bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") -S
-cd $OLDPWD
+if uses_gendwarfksyms "$KSRC"; then
+  # Symbol CRCs come from the compiler's DWARF here: use GKI's own clang so
+  # they match Google's (see setup_gki_clang)
+  CLANG_BIN="$WORKDIR/gki-clang/bin"
+  setup_gki_clang "$KSRC" "$WORKDIR/gki-clang" || exit 1
+else
+  CLANG_BIN="$WORKDIR/neutron-clang/bin"
+  mkdir -p "$WORKDIR/neutron-clang"
+  cd "$WORKDIR/neutron-clang"
+  bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") -S
+  cd $OLDPWD
+fi
 if [ ! -d "$CLANG_BIN" ]; then
     error "Clang not found in ${CLANG_BIN}."
     exit 1

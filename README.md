@@ -93,6 +93,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **6.1 source:** built from AOSP's `android14-6.1` instead of GKID's [GKI-Duchamp-6.1](https://github.com/ahmed-alnassif/GKI-Duchamp-6.1) device tree. 6.1 now gets the same patch set as the other lines and AOSP fixes as soon as they land, instead of waiting for the device tree to be merged by hand.
 - **Source branches:** 6.1 and 6.6 build from the main GKI branches (`android14-6.1`, `android15-6.6`), which Google builds GKI releases from and which get Android security fixes first. GKID used `android15-6.6-lts` for 6.6.
 - **AutoFDO:** uses the sample profile Google ships in the GKI tree (6.6 and 6.12).
+- **6.12 compiler:** 6.12 builds with the clang Google builds GKI 6.12 with (`r536225`, from AOSP's prebuilts); the other lines use Neutron Clang. 6.12 computes symbol checksums from the compiler's debug info, and newer clangs lay that out differently, which changed some checksums from Google's even though the types are the same.
 - **KMI check:** after each build, compares the kernel's exported symbols with Google's GKI ABI on every line. It reports which symbols that phone makers' modules use have changed or gone missing, per vendor symbol list, and ignores symbols exported by Android's own GKI modules. The full list is saved as `kmi-report-<line>-<variant>.txt` in the build artifacts. On 6.1 and 6.6, whose KMI matches stock GKI, a mismatch fails the build; on the other lines it only warns for now. On 6.12, where symbol checksums come from the compiler's debug info, the log also explains each changed checksum: the symbol's type string and debug info, and whether a gcc-built copy of the checksum tool gets Google's value.
 - **Stock-style kernel name (optional, `STOCK_NAME`):**
   - Reports a stock-style release (for example `-android15-8-g…`) instead of `-NovaGKI-rN-…`.
@@ -210,7 +211,7 @@ Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** (
 - BBRv3 by Google's BBR team; KMI-safe backports based on fatalcoder524's
 - [GKI_FinaSU](https://github.com/muling0721/GKI_FinaSU) by muling0721: the FinaSU manager certificate extractor
 - [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by osm0sis
-- [Neutron Clang](https://github.com/Neutron-Toolchains)
+- [Neutron Clang](https://github.com/Neutron-Toolchains); Google's [prebuilt clang](https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86) for 6.12
 - DroidSpaces kernel config by [ravindu644](https://github.com/ravindu644)
 
 ## License
