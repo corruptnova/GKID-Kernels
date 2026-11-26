@@ -621,9 +621,10 @@ fi
 # instead of finding out on a device. The full list goes into the artifacts.
 KMI_REPORT="$RELEASE_DIR/kmi-report-${KERNEL_VERSION}-${VARIANT}.txt"
 KMI_SUMMARY="$WORKDIR/kmi-summary.txt"
-# Lines whose KMI matches stock GKI fail the build on a regression; the rest
-# only warn until they match too. Set KMI_STRICT=true or false to override.
-KMI_STRICT_LINES="6.1 6.6"
+# Lines whose KMI matches stock GKI fail the build on a regression (every line
+# since runs 29 and 31); a line left out only warns. Set KMI_STRICT=true or
+# false to override.
+KMI_STRICT_LINES="5.10 5.15 6.1 6.6 6.12"
 if [ -z "${KMI_STRICT:-}" ]; then
   case " $KMI_STRICT_LINES " in
     *" $KERNEL_VERSION "*) KMI_STRICT=true ;;
