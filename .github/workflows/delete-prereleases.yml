@@ -1,0 +1,39 @@
+name: Delete build pre-releases
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      DRY_RUN:
+        description: "Only list the pre-releases that would be deleted"
+        type: boolean
+        default: true
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete vYY.MM.DD-rN pre-releases and their tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.DRY_RUN }}
+        run: |
+          set -euo pipefail
+          # Build pre-releases only: never full releases or ci-ccache-store (the build cache)
+          tags=$(gh release list --repo "$REPO" --limit 1000 --json tagName,isPrerelease \
+            --jq '.[] | select(.isPrerelease) | .tagName' \
+            | grep -E '^v[0-9]{2}\.[0-9]{2}\.[0-9]{2}-r[0-9]+$' || true)
+          if [ -z "$tags" ]; then
+            echo "No build pre-releases to delete"
+            exit 0
+          fi
+          for tag in $tags; do
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Would delete: $tag"
+            else
+              gh release delete "$tag" --repo "$REPO" --cleanup-tag --yes
+              echo "Deleted: $tag (and its tag)"
+            fi
+          done

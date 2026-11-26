@@ -83,6 +83,11 @@ on:
         type: string
         default: ""
 
+      PRERELEASE:
+        description: "Publish as a pre-release (off: a full release marked Latest)"
+        type: boolean
+        default: true
+
 env:
   MAN_DISABLE: true
   DEBIAN_FRONTEND: noninteractive
@@ -351,7 +356,8 @@ jobs:
           tag_name: ${{ env.RELEASE }}
           # Tag the commit that was built, not the default branch's latest
           target_commitish: ${{ github.sha }}
-          prerelease: true
+          prerelease: ${{ inputs.PRERELEASE }}
+          make_latest: ${{ inputs.PRERELEASE && 'false' || 'true' }}
           files: |
             release-artifacts/*.zip
             release-artifacts/checksums.txt

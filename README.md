@@ -39,7 +39,7 @@ Each release has one zip per variant for each kernel line, named `NovaGKI-<varia
 
 Both include SuSFS v2.4.0, Baseband Guard, NTSync, BBRv3 and the hardening and hiding changes below. Neither has KPM.
 
-Releases are published as pre-releases named `vYY.MM.DD-rN` on the [Releases](../../releases) page.
+Releases are named `vYY.MM.DD-rN` on the [Releases](../../releases) page. Tested builds are full releases (the one marked Latest); test builds are pre-releases.
 
 ## Installing
 
@@ -94,7 +94,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **Source branches:** 6.1 and 6.6 build from the main GKI branches (`android14-6.1`, `android15-6.6`), which Google builds GKI releases from and which get Android security fixes first. GKID used `android15-6.6-lts` for 6.6.
 - **AutoFDO:** uses the sample profile Google ships in the GKI tree (6.6 and 6.12).
 - **6.12 compiler:** 6.12 builds with the clang Google builds GKI 6.12 with (`r536225`, from AOSP's prebuilts); the other lines use Neutron Clang. 6.12 computes symbol checksums from the compiler's debug info, and newer clangs lay that out differently, which changed some checksums from Google's even though the types are the same.
-- **KMI check:** after each build, compares the kernel's exported symbols with Google's GKI ABI on every line. It reports which symbols that phone makers' modules use have changed or gone missing, per vendor symbol list, and ignores symbols exported by Android's own GKI modules. The full list is saved as `kmi-report-<line>-<variant>.txt` in the build artifacts. On 6.1 and 6.6, whose KMI matches stock GKI, a mismatch fails the build; on the other lines it only warns for now. On 6.12, where symbol checksums come from the compiler's debug info, the log also explains each changed checksum: the symbol's type string and debug info, and whether a gcc-built copy of the checksum tool gets Google's value.
+- **KMI check:** after each build, compares the kernel's exported symbols with Google's GKI ABI on every line. It reports which symbols that phone makers' modules use have changed or gone missing, per vendor symbol list, and ignores symbols exported by Android's own GKI modules. The full list is saved as `kmi-report-<line>-<variant>.txt` in the build artifacts. Every line's KMI matches stock GKI, so a mismatch fails the build (`KMI_STRICT=false` turns it into a warning). On 6.12, where symbol checksums come from the compiler's debug info, the log also explains each changed checksum: the symbol's type string and debug info, and whether a gcc-built copy of the checksum tool gets Google's value.
 - **Stock-style kernel name (optional, `STOCK_NAME`):**
   - Reports a stock-style release (for example `-android15-8-g…`) instead of `-NovaGKI-rN-…`.
   - Can copy a stock kernel's builder, compiler and build date.
@@ -170,7 +170,7 @@ To make it permanent, put the command in a script in `/data/adb/service.d/`.
 
 ## Building
 
-Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a pre-release with all the lines it built. Jobs run two at a time, so an `All` run (10 jobs) takes about five times as long as a single line.
+Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** ([`.github/workflows/build.yml`](.github/workflows/build.yml)) and click **Run workflow**. Every `kernel` run publishes a release with all the lines it built: a pre-release by default, or a full release marked Latest with `PRERELEASE` off. Jobs run two at a time, so an `All` run (10 jobs) takes about five times as long as a single line.
 
 | Input | Default | What it does |
 |---|---|---|
@@ -186,6 +186,9 @@ Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** (
 | `HARDENING` | on | KMI-safe hardening |
 | `STOCK_NAME` | off | Reports a stock GKI-style kernel release |
 | `STOCK_VERSION` | empty | With `STOCK_NAME`: a stock `Linux version …` line, or just a release suffix, to copy from |
+| `PRERELEASE` | on | Publishes a pre-release; off publishes a full release marked Latest |
+
+To clear out test builds, run **Delete build pre-releases** ([`.github/workflows/delete-prereleases.yml`](.github/workflows/delete-prereleases.yml)). It deletes every `vYY.MM.DD-rN` pre-release and its tag, never full releases or the `ci-ccache-store` build cache, and only lists them unless `DRY_RUN` is off.
 
 `build.sh` also reads these environment variables:
 
@@ -193,7 +196,7 @@ Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** (
 |---|---|
 | `FINASU_REF` | FinaSU branch or tag to build (default `dev`) |
 | `FINASU_CERT_SIZE`, `FINASU_CERT_HASH` | Manager certificate to trust; skips the APK download |
-| `KMI_STRICT=true` or `false` | Whether a changed or missing symbol that vendor modules use fails the build. Default: on for 6.1 and 6.6, off for the other lines |
+| `KMI_STRICT=true` or `false` | Whether a changed or missing symbol that vendor modules use fails the build. Default: on for every line |
 
 `build.sh` also supports the Vanilla, KernelSU, Compat and NoDS variants. To build those, add their names to `VARIANTS` and turn on the matching `BUILD_*` flag in the workflow's matrix step.
 
