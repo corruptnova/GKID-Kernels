@@ -94,6 +94,7 @@ Add `--suspend` to also check that the phone still suspends. The exit status is 
 - **Source branches:** 6.1 and 6.6 build from the main GKI branches (`android14-6.1`, `android15-6.6`), which Google builds GKI releases from and which get Android security fixes first. GKID used `android15-6.6-lts` for 6.6.
 - **AutoFDO:** uses the sample profile Google ships in the GKI tree (6.6 and 6.12).
 - **6.12 compiler:** 6.12 builds with the clang Google builds GKI 6.12 with (`r536225`, from AOSP's prebuilts); the other lines use Neutron Clang. 6.12 computes symbol checksums from the compiler's debug info, and newer clangs lay that out differently, which changed some checksums from Google's even though the types are the same.
+- **No LTO on 6.12:** 6.12 always builds without LTO, whatever the `LTO` input says. Its symbol checksums are computed from each object's debug info, which LTO objects don't have until the final link, so with LTO the kernel falls back to the older method and every checksum differs from Google's. Stock GKI 6.12 is built without LTO too.
 - **KMI check:** after each build, compares the kernel's exported symbols with Google's GKI ABI on every line. It reports which symbols that phone makers' modules use have changed or gone missing, per vendor symbol list, and ignores symbols exported by Android's own GKI modules. The full list is saved as `kmi-report-<line>-<variant>.txt` in the build artifacts. Every line's KMI matches stock GKI, so a mismatch fails the build (`KMI_STRICT=false` turns it into a warning). On 6.12, where symbol checksums come from the compiler's debug info, the log also explains each changed checksum: the symbol's type string and debug info, and whether a gcc-built copy of the checksum tool gets Google's value.
 - **Stock-style kernel name (optional, `STOCK_NAME`):**
   - Reports a stock-style release (for example `-android15-8-g…`) instead of `-NovaGKI-rN-…`.
@@ -176,7 +177,7 @@ Builds run on GitHub Actions. Open the Actions tab, select **NovaGKI Builder** (
 |---|---|---|
 | `TODO` | `kernel` | `kernel` builds and releases; `defconfig` only exports the generated config |
 | `TEST` | `no` | `yes` runs the pipeline without compiling |
-| `LTO` | `fullLTO` | `fullLTO`, `thinLTO` or `noneLTO` |
+| `LTO` | `fullLTO` | `fullLTO`, `thinLTO` or `noneLTO`. 6.12 always builds without LTO, to match GKI's symbol checksums |
 | `KERNEL_VERSION` | `All` | Kernel line to build: `All`, `5.10`, `5.15`, `6.1`, `6.6` or `6.12` |
 | `CLEAN_LTO_CACHE` | on | Clears the ThinLTO cache first |
 | `DROIDSPACES` | on | DroidSpaces support |

@@ -23,7 +23,7 @@ on:
           - "yes"
 
       LTO:
-        description: enable LTO optimization
+        description: "LTO optimization (6.12 always builds without LTO, to match GKI's symbol checksums)"
         default: "fullLTO"
         type: choice
         options:

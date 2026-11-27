@@ -118,6 +118,45 @@ def variant_traits(build, inputs):
 	}
 
 
+def lto_exceptions(used, expected):
+	"""'6.12: none' for each line in used ({line: LTO}) whose LTO isn't expected, in line order."""
+	order = [v for v in KERNEL_VERSION_ORDER if v in used] + sorted(set(used) - set(KERNEL_VERSION_ORDER))
+	return ", ".join(f"{kv}: {'none' if used[kv] == 'None' else used[kv]}" for kv in order if used[kv] != expected)
+
+
+def variant_lto(builds, inputs):
+	"""A variant's LTO column: what most of its lines used, plus the lines that differ.
+
+	The LTO input doesn't reach every line: build.sh builds 6.12+ without LTO,
+	whose GKI symbol CRCs (gendwarfksyms) need non-LTO objects. So one variant
+	can be Full LTO on 5.10-6.6 and have none on 6.12, e.g. "Full (6.12: none)".
+	"""
+	used = {b.get("KERNEL_VERSION", "?"): variant_traits(b, inputs)["lto"] for b in builds}
+	values = list(used.values())
+	setting = LTO_NAMES.get(inputs["lto"], inputs["lto"])
+	main = setting if setting in values else max(values, key=values.count)
+	cell = main if main != "None" else "❌"
+	exceptions = lto_exceptions(used, main)
+	return f"{cell} ({exceptions})" if exceptions else cell
+
+
+def lto_setting_text(all_builds, inputs):
+	"""The release's LTO setting, plus the lines that built without it (NoLTO variants aside)."""
+	setting = LTO_NAMES.get(inputs["lto"], inputs["lto"] or "Unknown")
+	used = {
+		b.get("KERNEL_VERSION", "?"): variant_traits(b, inputs)["lto"]
+		for b in all_builds
+		if "NoLTO" not in variant_name(b)
+	}
+	exceptions = lto_exceptions(used, setting)
+	if not exceptions:
+		return setting
+	text = f"{setting}, except {exceptions}"
+	if all(used[kv] == "None" for kv in used if used[kv] != setting):
+		text += " (GKI's symbol checksums there need a build without LTO)"
+	return text
+
+
 def variant_summary(traits):
 	parts = [f"{traits['root']} root" if traits["root"] != "None" else "no root"]
 	if traits["susfs"]:
@@ -133,9 +172,14 @@ def variant_summary(traits):
 def variant_table(all_builds, inputs):
 	"""Markdown table of the variants actually in this release, plus whether any is Compat/FinaSU."""
 	yes_no = lambda v: "✅" if v else "❌"
-	rows = {}
+	by_variant = {}
 	for b in all_builds:
-		rows.setdefault(variant_name(b), variant_traits(b, inputs))
+		by_variant.setdefault(variant_name(b), []).append(b)
+	# One row per variant across all lines; LTO is the only trait that differs by line
+	rows = {
+		name: dict(variant_traits(builds[0], inputs), lto=variant_lto(builds, inputs))
+		for name, builds in by_variant.items()
+	}
 	lines = [
 		"| Variant | Root | SuSFS | LTO | Compat | DroidSpaces / NetHunter |",
 		"|---------|------|-------|-----|--------|-------------------------|",
@@ -143,8 +187,7 @@ def variant_table(all_builds, inputs):
 	for name in sorted(rows, key=lambda n: (n.startswith("Compat"), n)):
 		t = rows[name]
 		root = t["root"] if t["root"] != "None" else "❌"
-		lto = t["lto"] if t["lto"] != "None" else "❌"
-		lines.append(f"| {name} | {root} | {yes_no(t['susfs'])} | {lto} | {yes_no(t['compat'])} | {yes_no(t['ds_nh'])} |")
+		lines.append(f"| {name} | {root} | {yes_no(t['susfs'])} | {t['lto']} | {yes_no(t['compat'])} | {yes_no(t['ds_nh'])} |")
 	has_compat = any(t["compat"] for t in rows.values())
 	has_finasu = any(t["root"] == "FinaSU" for t in rows.values())
 	return "\n".join(lines), has_compat, has_finasu
@@ -256,7 +299,7 @@ def build_release_body():
 
 	roots = {variant_traits(b, inputs)["root"] for b in all_builds}
 	has_susfs = any(b.get("KSU_SUSFS") == "true" for b in all_builds)
-	lto_setting = LTO_NAMES.get(inputs["lto"], inputs["lto"] or "Unknown")
+	lto_setting = lto_setting_text(all_builds, inputs)
 
 	notes = [f"- **Bootloop?** {bootloop_advice}"]
 	if has_susfs:
